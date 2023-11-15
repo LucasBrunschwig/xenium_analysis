@@ -1,0 +1,14 @@
+name: c2l_env
+dependencies:
+  - pandas
+  - numpy
+  - matplotlib
+  - squidpy
+  - scanpy
+  - pip
+  - pip:
+    - cell2location==0.1.3
+    - loompy==3.0.7
+    - squidpy==1.3.1
+
+
