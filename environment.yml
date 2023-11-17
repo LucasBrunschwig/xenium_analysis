@@ -3,8 +3,6 @@ dependencies:
   - pandas
   - numpy
   - matplotlib
-  - squidpy
-  - scanpy
   - pip
   - pip:
     - cell2location==0.1.3

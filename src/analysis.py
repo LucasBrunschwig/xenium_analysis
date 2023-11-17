@@ -15,7 +15,6 @@ if __name__ == "__main__":
     data_path = os.path.join("..", "..", "scratch", "lbrunsch", "data", "Xenium_V1_FF_Mouse_Brain_MultiSection_1")
     save_path = os.path.join("..", "..", "scratch", "lbrunsch", "results")
 
-
     # Load Data
     adata = load_xenium_data(data_path)
 

@@ -20,4 +20,9 @@ def load_xenium_data(path):
 
 def load_rna_seq_data(path):
     adata = sc.read_loom(path)
+
+    # Ensure unique var names
+    adata.var["SYMBOL"] = adata.var.index
+    adata.var.set_index("Accession", drop=True, inplace=True)
+
     return adata
