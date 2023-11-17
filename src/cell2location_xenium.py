@@ -14,6 +14,7 @@ import numpy as np
 import scvi
 import squidpy as sq
 from scipy.sparse import csr_matrix
+import logging
 
 # relative
 from utils import load_xenium_data, load_rna_seq_data
@@ -23,6 +24,9 @@ scvi.settings.seed = 0
 
 RESULTS_DIR = Path("../../scratch/lbrunsch/results/cell2location")
 os.makedirs(RESULTS_DIR, exist_ok=True)
+
+logging.basicConfig(filename='../../scratch/lbrunsch/results/cell2location/log.txt', level=logging.INFO)
+
 
 HOUSE_KEEPING_GENES_ENSEMBLE_ID = [
     "ENSMUSG00000005610",
