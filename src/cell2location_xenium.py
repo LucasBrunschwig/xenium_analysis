@@ -22,6 +22,7 @@ scvi.settings.seed = 0
 
 
 RESULTS_DIR = Path("../../scratch/lbrunsch/results/cell2location")
+os.makedirs(RESULTS_DIR, exist_ok=True)
 
 HOUSE_KEEPING_GENES_ENSEMBLE_ID = [
     "ENSMUSG00000005610",
@@ -92,8 +93,6 @@ def qc_metrics(adata):
         sc.pp.calculate_qc_metrics(adata_sample, inplace=True, percent_top=[50, 100, 200])
 
         fig, axs = plt.subplots(1, 4, figsize=(24, 5))
-
-        # Histograms
 
         # Total Counts per cell
         sns.histplot(
@@ -230,7 +229,7 @@ def signature_ref(annotated_ref_seq, label):
     mod.view_anndata_setup()
 
     # train the probabilistic model
-    mod.train(max_epochs=250, use_gpu=True)
+    mod.train(max_epochs=50, use_gpu=True)
 
     mod.plot_history(50)
     plt.savefig(RESULTS_DIR / "adata_signature_training.png")
@@ -242,6 +241,7 @@ def signature_ref(annotated_ref_seq, label):
     )
 
     adata_ref_result = RESULTS_DIR / "adata_ref"
+    os.makedirs(adata_ref_result, exist_ok=True)
 
     # Save model
     mod.save(f"{adata_ref_result}", overwrite=True)
@@ -306,7 +306,7 @@ def run_cell2location(annotated_data, inf_aver):
     )
     mod.view_anndata_setup()
 
-    mod.train(max_epochs=30000,
+    mod.train(max_epochs=50,
               # train using full data (batch_size=None)
               batch_size=None,
               # use all data points in training because
@@ -316,7 +316,7 @@ def run_cell2location(annotated_data, inf_aver):
               )
 
     # plot ELBO loss history during training, removing first 100 epochs from the plot
-    mod.plot_history(1000)
+    mod.plot_history(50)
     plt.legend(labels=['full data training'])
     plt.savefig(RESULTS_DIR / "plot_history_c2l.png")
     plt.close()
@@ -327,8 +327,9 @@ def run_cell2location(annotated_data, inf_aver):
     )
 
     # Save model
-    run_name = RESULTS_DIR / "cell2location"
+    run_name = RESULTS_DIR / "cell2location_results"
     os.makedirs(run_name, exist_ok=True)
+
     mod.save(f"{run_name}", overwrite=True)
 
     # mod = cell2location.models.Cell2location.load(f"{run_name}", adata_vis)
@@ -338,7 +339,7 @@ def run_cell2location(annotated_data, inf_aver):
     adata_vis.write(adata_file)
 
     mod.plot_QC()
-    plt.savefig(RESULTS_DIR / "QC_spatial_mapping.png")
+    plt.savefig(RESULTS_DIR / "cell2location_results" / "QC_spatial_mapping.png")
     plt.close()
 
 
