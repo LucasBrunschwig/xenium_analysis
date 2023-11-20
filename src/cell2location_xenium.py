@@ -372,6 +372,7 @@ def cell2location_xenium(use_gene_intersection: bool = False, cell_types_granula
         annotated_data = annotated_data[:, is_in]
 
     # Examine QC metrics of Xenium data
+    print("QC Metrics evaluation for replicates")
     qc_metrics(annotated_data)
 
     # mitochondria-encoded (MT) genes should be removed for spatial mapping
@@ -379,7 +380,8 @@ def cell2location_xenium(use_gene_intersection: bool = False, cell_types_granula
     annotated_data = annotated_data[:, ~annotated_data.var['mt'].values]
 
     # plot umap as Control for replicate
-    # plot_umap_samples(annotated_data)
+    print("UMAP for replicates")
+    plot_umap_samples(annotated_data)
 
     # plot umap as control for cell types granularity
     if cell_types_granularity == "taxonomy":
@@ -391,8 +393,8 @@ def cell2location_xenium(use_gene_intersection: bool = False, cell_types_granula
         annotated_ref_seq, inf_aver = signature_ref(annotated_ref_seq, label="TaxonomyRank3")
 
     elif cell_types_granularity == "cluster":
-        # print(len(annotated_ref_seq.obs["ClusterName"].unique()), annotated_ref_seq.obs["ClusterName"].unique())
-        print("UMAP for Annotated Single Cell RNA sequencing data")
+        print(len(annotated_ref_seq.obs["ClusterName"].unique()), annotated_ref_seq.obs["ClusterName"].unique())
+        print("UMAP for RNA sequencing data")
         plot_umap_ref(annotated_ref_seq, cell_taxonomy=["ClusterName"])
         print("Determining Cell Signatures")
         annotated_ref_seq, inf_aver = signature_ref(annotated_ref_seq, label="ClusterName")
@@ -400,6 +402,7 @@ def cell2location_xenium(use_gene_intersection: bool = False, cell_types_granula
     else:
         raise ValueError("Not implemented yet")
 
+    print("Running Cell2Location with determined Cell Signature")
     run_cell2location(annotated_data, inf_aver)
 
     return 0
