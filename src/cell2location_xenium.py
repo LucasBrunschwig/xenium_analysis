@@ -222,7 +222,7 @@ def signature_ref(annotated_ref_seq, label):
                                                        # cell type, co-variate used for constructing signatures
                                                        labels_key=label,
                                                        # multiplicative technical effects (platform, 3' - 5', donor)
-                                                       categorical_covariate_keys=["Age"]  # "ChipID"]
+                                                       # categorical_covariate_keys=["Age"]  # "ChipID"]
                                                        )
 
     from cell2location.models import RegressionModel
