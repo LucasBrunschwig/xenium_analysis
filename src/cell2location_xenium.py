@@ -233,9 +233,9 @@ def signature_ref(annotated_ref_seq, label):
     mod.view_anndata_setup()
 
     # train the probabilistic model
-    mod.train(max_epochs=50, use_gpu=True)
+    mod.train(max_epochs=500, use_gpu=True)
 
-    mod.plot_history(50)
+    mod.plot_history(10)
     plt.savefig(RESULTS_DIR / "adata_signature_training.png")
     plt.close()
 
@@ -304,7 +304,7 @@ def run_cell2location(annotated_data, inf_aver):
     )
     mod.view_anndata_setup()
 
-    mod.train(max_epochs=50,
+    mod.train(max_epochs=500,
               # train using full data (batch_size=None)
               batch_size=None,
               # use all data points in training because
