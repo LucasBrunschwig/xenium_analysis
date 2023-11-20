@@ -347,7 +347,7 @@ def run_cell2location(annotated_data, inf_aver):
     plt.close()
 
 
-def cell2location_xenium(use_gene_intersection: bool = False, cell_types_granularity="cluster"):
+def cell2location_xenium(use_gene_intersection: bool = False, cell_types_granularity: str ="cluster"):
 
     # Path to data
     data_path = Path("../../scratch/lbrunsch/data")
@@ -387,20 +387,24 @@ def cell2location_xenium(use_gene_intersection: bool = False, cell_types_granula
     annotated_data = annotated_data[:, ~annotated_data.var['mt'].values]
 
     # plot umap as Control for replicate
-    plot_umap_samples(annotated_data)
+    # plot_umap_samples(annotated_data)
 
-    # Select Cell Type Nomenclature (1-4)
-    print(len(annotated_ref_seq.obs["TaxonomyRank1"].unique()), annotated_ref_seq.obs["TaxonomyRank1"].unique())
-    print(len(annotated_ref_seq.obs["TaxonomyRank4"].unique()), ": ", annotated_ref_seq.obs["TaxonomyRank4"].unique()[0:10])
+
 
     # plot umap as control for cell types granularity
     if cell_types_granularity == "taxonomy":
+        # Select Cell Type Nomenclature (1-4)
+        print(len(annotated_ref_seq.obs["TaxonomyRank1"].unique()), annotated_ref_seq.obs["TaxonomyRank1"].unique())
+        print(len(annotated_ref_seq.obs["TaxonomyRank4"].unique()), ": ",
+              annotated_ref_seq.obs["TaxonomyRank4"].unique()[0:10])
         plot_umap_ref(annotated_ref_seq, cell_taxonomy=["TaxonomyRank1", "TaxonomyRank2", "TaxonomyRank3", "TaxonomyRank4"])
         annotated_ref_seq, inf_aver = signature_ref(annotated_ref_seq, label="TaxonomyRank3")
 
     elif cell_types_granularity == "cluster":
-        plot_umap_ref(annotated_ref_seq, cell_taxonomy=["ClusterNames"])
-        annotated_ref_seq, inf_aver = signature_ref(annotated_ref_seq, label="ClusterNames")
+        print(len(annotated_ref_seq.obs["ClusterName"].unique()), annotated_ref_seq.obs["ClusterName"].unique())
+        plot_umap_ref(annotated_ref_seq, cell_taxonomy=["ClusterName"])
+        print("Determining Cell Signatures")
+        annotated_ref_seq, inf_aver = signature_ref(annotated_ref_seq, label="ClusterName")
 
     else:
         raise ValueError("Not implemented yet")

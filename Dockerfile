@@ -30,7 +30,7 @@ ENV PATH /home/${LDAP_USERNAME}/miniconda/bin:${PATH}
 
 ## Create a conda env with required packages
 RUN conda install mamba -n base -c conda-forge -y
-RUN mamba create -n venv python=3.10 -y
+RUN mamba create -n venv python=3.8 -y
 COPY environment.yml /tmp/environment.yml
 RUN mamba env update -n venv -f /tmp/environment.yml
 RUN echo "source activate venv" > ~/.bashrc
