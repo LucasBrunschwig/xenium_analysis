@@ -254,7 +254,7 @@ def signature_ref(annotated_ref_seq, label):
     adata_file = f"{adata_ref_result}/sc.h5ad"
     annotated_ref_seq.write(adata_file)
 
-    _ = mod.export_posterior(
+    annotated_ref_seq = mod.export_posterior(
         annotated_ref_seq, use_quantiles=True,
         # choose quantiles
         add_to_varm=["q05", "q50", "q95", "q0001"],
@@ -399,8 +399,9 @@ def cell2location_xenium(use_gene_intersection: bool = False, cell_types_granula
         annotated_ref_seq, inf_aver = signature_ref(annotated_ref_seq, label="TaxonomyRank3")
 
     elif cell_types_granularity == "cluster":
-        print(len(annotated_ref_seq.obs["ClusterName"].unique()), annotated_ref_seq.obs["ClusterName"].unique())
-        plot_umap_ref(annotated_ref_seq, cell_taxonomy=["ClusterName"])
+        # print(len(annotated_ref_seq.obs["ClusterName"].unique()), annotated_ref_seq.obs["ClusterName"].unique())
+        print("UMAP for Annotated Single Cell RNA sequencing data")
+        # plot_umap_ref(annotated_ref_seq, cell_taxonomy=["ClusterName"])
         print("Determining Cell Signatures")
         annotated_ref_seq, inf_aver = signature_ref(annotated_ref_seq, label="ClusterName")
 
