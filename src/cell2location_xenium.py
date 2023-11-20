@@ -257,7 +257,7 @@ def signature_ref(annotated_ref_seq, label):
     annotated_ref_seq = mod.export_posterior(
         annotated_ref_seq, use_quantiles=True,
         # choose quantiles
-        add_to_varm=["q05", "q50", "q95", "q0001"],
+        add_to_varm=["q05", "q50", "q95", "q0001", "means", "stds"],
         sample_kwargs={'batch_size': 2500}
     )
 
