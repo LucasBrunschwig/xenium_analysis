@@ -233,7 +233,7 @@ def signature_ref(annotated_ref_seq, label):
     mod.view_anndata_setup()
 
     # train the probabilistic model
-    mod.train(max_epochs=100, use_gpu=True)
+    mod.train(max_epochs=10000, use_gpu=True)
 
     mod.plot_history(10)
     plt.savefig(RESULTS_DIR / "adata_signature_training.png")
@@ -304,7 +304,7 @@ def run_cell2location(annotated_data, inf_aver):
     )
     mod.view_anndata_setup()
 
-    mod.train(max_epochs=100,
+    mod.train(max_epochs=10000,
               # train using full data (batch_size=None)
               batch_size=None,
               # use all data points in training because
@@ -319,16 +319,16 @@ def run_cell2location(annotated_data, inf_aver):
     plt.savefig(RESULTS_DIR / "plot_history_c2l.png")
     plt.close()
 
-    # In this section, we export the estimated cell abundance (summary of the posterior distribution).
-    adata_vis = mod.export_posterior(
-        adata_vis, sample_kwargs={'num_samples': 1000, 'batch_size': int(mod.adata.n_obs / 10), 'use_gpu': False}
-    )
-
     # Save model
     run_name = RESULTS_DIR / "cell2location_results"
     os.makedirs(run_name, exist_ok=True)
 
     mod.save(f"{run_name}", overwrite=True)
+
+    # In this section, we export the estimated cell abundance (summary of the posterior distribution).
+    adata_vis = mod.export_posterior(
+        adata_vis, sample_kwargs={'num_samples': 800, 'batch_size': int(mod.adata.n_obs / 100), 'use_gpu': False}
+    )
 
     # Save anndata object with results
     adata_file = f"{run_name}/sp.h5ad"
