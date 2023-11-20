@@ -193,13 +193,13 @@ def plot_umap_ref(adata, cell_taxonomy: list):
     sc.pp.neighbors(adata_vis_plt, n_neighbors=20, n_pcs=40, metric='cosine')
     sc.tl.umap(adata_vis_plt, min_dist=0.3, spread=1)
 
-    with mpl.rc_context({'axes.facecolor': 'white'}):
+    with mpl.rc_context({'axes.facecolor': 'white', 'savefig.bbox': 'tight'}):
         sc.pl.umap(adata_vis_plt, color=cell_taxonomy, size=2,
                    color_map='RdPu', ncols=1,
                    legend_fontsize=10)
-
-    plt.savefig(RESULTS_DIR / "umap_ref.png")
-    plt.close()
+        plt.tight_layout()
+        plt.savefig(RESULTS_DIR / "umap_ref.png")
+        plt.close()
 
 
 def filter_gene_index(adata, cell_cutoff=5, cell_cutoff2=0.03, nonz_mean_cutoff=1.12):
@@ -339,7 +339,7 @@ def run_cell2location(annotated_data, inf_aver):
     plt.close()
 
 
-def cell2location_xenium(use_gene_intersection: bool = False, cell_types_granularity: str ="cluster"):
+def cell2location_xenium(use_gene_intersection: bool = False, cell_types_granularity: str = "cluster"):
 
     # Path to data
     data_path = Path("../../scratch/lbrunsch/data")
@@ -393,7 +393,7 @@ def cell2location_xenium(use_gene_intersection: bool = False, cell_types_granula
     elif cell_types_granularity == "cluster":
         # print(len(annotated_ref_seq.obs["ClusterName"].unique()), annotated_ref_seq.obs["ClusterName"].unique())
         print("UMAP for Annotated Single Cell RNA sequencing data")
-        # plot_umap_ref(annotated_ref_seq, cell_taxonomy=["ClusterName"])
+        plot_umap_ref(annotated_ref_seq, cell_taxonomy=["ClusterName"])
         print("Determining Cell Signatures")
         annotated_ref_seq, inf_aver = signature_ref(annotated_ref_seq, label="ClusterName")
 
