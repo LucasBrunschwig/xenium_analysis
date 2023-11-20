@@ -321,7 +321,7 @@ def run_cell2location(annotated_data, inf_aver):
 
     # In this section, we export the estimated cell abundance (summary of the posterior distribution).
     adata_vis = mod.export_posterior(
-        adata_vis, sample_kwargs={'num_samples': 1000, 'batch_size': mod.adata.n_obs, 'use_gpu': True}
+        adata_vis, sample_kwargs={'num_samples': 1000, 'batch_size': int(mod.adata.n_obs / 10), 'use_gpu': False}
     )
 
     # Save model
