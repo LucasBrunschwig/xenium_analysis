@@ -25,4 +25,7 @@ def load_rna_seq_data(path):
     adata.var["SYMBOL"] = adata.var.index
     adata.var.set_index("Accession", drop=True, inplace=True)
 
+    adata.obs["SYMBOL"] = adata.obs.index
+    adata.obs_names_make_unique()
+
     return adata
