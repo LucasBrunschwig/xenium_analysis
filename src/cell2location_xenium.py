@@ -222,7 +222,7 @@ def signature_ref(annotated_ref_seq, label):
                                                        # cell type, co-variate used for constructing signatures
                                                        labels_key=label,
                                                        # multiplicative technical effects (platform, 3' - 5', donor)
-                                                       categorical_covariate_keys=["age", "ChipID"]
+                                                       categorical_covariate_keys=["Age", "ChipID"]
                                                        )
 
     from cell2location.models import RegressionModel
@@ -388,8 +388,6 @@ def cell2location_xenium(use_gene_intersection: bool = False, cell_types_granula
 
     # plot umap as Control for replicate
     # plot_umap_samples(annotated_data)
-
-
 
     # plot umap as control for cell types granularity
     if cell_types_granularity == "taxonomy":
