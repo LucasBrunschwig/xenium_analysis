@@ -218,11 +218,11 @@ def signature_ref(annotated_ref_seq, label):
     # prepare anndata for the regression model
     cell2location.models.RegressionModel.setup_anndata(adata=annotated_ref_seq,
                                                        # 10X reaction / sample / batch
-                                                       batch_key='SampleID',
+                                                       # batch_key='SampleID',
                                                        # cell type, co-variate used for constructing signatures
                                                        labels_key=label,
                                                        # multiplicative technical effects (platform, 3' - 5', donor)
-                                                       categorical_covariate_keys=["Age", "ChipID"]
+                                                       categorical_covariate_keys=["Age"]  # "ChipID"]
                                                        )
 
     from cell2location.models import RegressionModel
