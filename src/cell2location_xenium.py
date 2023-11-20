@@ -241,7 +241,8 @@ def signature_ref(annotated_ref_seq, label):
 
     # In this section, we export the estimated cell abundance (summary of the posterior distribution).
     annotated_ref_seq = mod.export_posterior(
-        annotated_ref_seq, sample_kwargs={'num_samples': 1000, 'batch_size': 2500, 'use_gpu': True}
+        annotated_ref_seq,
+        sample_kwargs={'num_samples': 1000, 'batch_size': 2500, 'use_gpu': True},
     )
 
     adata_ref_result = RESULTS_DIR / "adata_ref"
@@ -254,12 +255,12 @@ def signature_ref(annotated_ref_seq, label):
     adata_file = f"{adata_ref_result}/sc.h5ad"
     annotated_ref_seq.write(adata_file)
 
-    annotated_ref_seq = mod.export_posterior(
-        annotated_ref_seq, use_quantiles=True,
-        # choose quantiles
-        add_to_varm=["q05", "q50", "q95", "q0001", "means", "stds"],
-        sample_kwargs={'batch_size': 2500}
-    )
+    #annotated_ref_seq = mod.export_posterior(
+    #    annotated_ref_seq, use_quantiles=True,
+    #    # choose quantiles
+    #    add_to_varm=["q05", "q50", "q95", "q0001", "means", "stds"],
+    #    sample_kwargs={'batch_size': 2500}
+    #)
 
     # Check issue with inference and noisy diagonal -> because corrected batch effect
     mod.plot_QC()
