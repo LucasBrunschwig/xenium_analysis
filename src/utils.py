@@ -5,6 +5,7 @@ import os
 import scanpy as sc
 import pandas as pd
 import gzip
+import squidpy as sq
 
 
 def load_xenium_data(path):
@@ -14,6 +15,8 @@ def load_xenium_data(path):
     df.set_index(adata.obs_names, inplace=True)
     adata.obs = df
     adata.obsm["spatial"] = adata.obs[["x_centroid", "y_centroid"]].copy().to_numpy()
+    adata.var["SYMBOL"] = adata.var.index
+    adata.var.set_index("gene_ids", drop=True, inplace=True)
 
     return adata
 
@@ -29,3 +32,16 @@ def load_rna_seq_data(path):
     adata.obs_names_make_unique()
 
     return adata
+
+
+def plot_xenium_labels(adata, label_key):
+    # Spatial Distribution of counts
+    sq.pl.spatial_scatter(
+        adata,
+        library_id="spatial",
+        shape=None,
+        color=[
+            label_key,
+        ],
+        wspace=0.4,
+    )

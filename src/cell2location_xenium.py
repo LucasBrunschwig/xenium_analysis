@@ -15,15 +15,20 @@ import scvi
 import squidpy as sq
 from scipy.sparse import csr_matrix
 import logging
+import torch
 
 # relative
 from utils import load_xenium_data, load_rna_seq_data
 
 scvi.settings.seed = 0
 
-
 RESULTS_DIR = Path("../../scratch/lbrunsch/results/cell2location")
+RESULTS_DIR_SIGNATURE = RESULTS_DIR / "adata_ref"
+RESULTS_DIR_C2L = RESULTS_DIR / "cell2location"
+
 os.makedirs(RESULTS_DIR, exist_ok=True)
+os.makedirs(RESULTS_DIR_C2L, exist_ok=True)
+os.makedirs(RESULTS_DIR_SIGNATURE, exist_ok=True)
 
 logging.basicConfig(filename='../../scratch/lbrunsch/results/cell2location/log.txt', level=logging.INFO)
 
@@ -64,10 +69,6 @@ def load_replicates(paths: list):
     for path in paths:
         adata = load_xenium_data(path)
         adata.obs['sample'] = str(path).split(os.sep)[-1]
-        adata.var['SYMBOL'] = adata.var_names
-        adata.var.rename(columns={'gene_ids': 'ENSEMBL'}, inplace=True)
-        adata.var_names = adata.var['ENSEMBL']
-        adata.var.drop(columns='ENSEMBL', inplace=True)
         adata.X = csr_matrix(adata.X)
         adata.var['mt'] = [gene.startswith('mt-') for gene in adata.var['SYMBOL']]
         adata.obs['mt_frac'] = adata[:, adata.var['mt'].tolist()].X.sum(1).A.squeeze() / adata.obs['total_counts']
@@ -209,11 +210,7 @@ def filter_gene_index(adata, cell_cutoff=5, cell_cutoff2=0.03, nonz_mean_cutoff=
                         nonz_mean_cutoff=nonz_mean_cutoff)
 
 
-def signature_ref(annotated_ref_seq, label):
-
-    # filter genes
-    selected = filter_gene_index(annotated_ref_seq)
-    annotated_ref_seq = annotated_ref_seq[:, selected].copy()
+def signature_ref(annotated_ref_seq, label, save_path):
 
     # prepare anndata for the regression model
     cell2location.models.RegressionModel.setup_anndata(adata=annotated_ref_seq,
@@ -235,49 +232,18 @@ def signature_ref(annotated_ref_seq, label):
     # train the probabilistic model
     mod.train(max_epochs=10000, use_gpu=True)
 
+    # Plot History
     mod.plot_history(10)
-    plt.savefig(RESULTS_DIR / "adata_signature_training.png")
+    plt.savefig(save_path / "adata_signature_training.png")
     plt.close()
-
-    # In this section, we export the estimated cell abundance (summary of the posterior distribution).
-    annotated_ref_seq = mod.export_posterior(
-        annotated_ref_seq,
-        sample_kwargs={'num_samples': 1000, 'batch_size': 2500, 'use_gpu': True},
-    )
-
-    adata_ref_result = RESULTS_DIR / "adata_ref"
-    os.makedirs(adata_ref_result, exist_ok=True)
 
     # Save model
-    mod.save(f"{adata_ref_result}", overwrite=True)
+    mod.save(f"{save_path}", overwrite=True)
 
-    # Save anndata object with results
-    adata_file = f"{adata_ref_result}/sc.h5ad"
-    annotated_ref_seq.write(adata_file)
-
-    # Check issue with inference and noisy diagonal -> because corrected batch effect
-    mod.plot_QC()
-    plt.savefig(RESULTS_DIR / "QC_adata_ref.png")
-    plt.close()
-
-    # Reload the data with the define parameters
-    adata_file = f"{adata_ref_result}/sc.h5ad"
-    adata_ref = sc.read_h5ad(adata_file)
-
-    # export estimated expression in each cluster
-    if 'means_per_cluster_mu_fg' in adata_ref.varm.keys():
-        inf_aver = adata_ref.varm['means_per_cluster_mu_fg'][[f'means_per_cluster_mu_fg_{i}'
-                                                              for i in adata_ref.uns['mod']['factor_names']]].copy()
-    else:
-        inf_aver = adata_ref.var[[f'means_per_cluster_mu_fg_{i}'
-                                  for i in adata_ref.uns['mod']['factor_names']]].copy()
-
-    inf_aver.columns = adata_ref.uns['mod']['factor_names']
-
-    return adata_ref, inf_aver
+    return mod
 
 
-def run_cell2location(annotated_data, inf_aver):
+def run_cell2location(annotated_data, inf_aver, save_path):
 
     sc.settings.set_figure_params(dpi=100, color_map='viridis', dpi_save=100,
                                   vector_friendly=True,
@@ -316,30 +282,16 @@ def run_cell2location(annotated_data, inf_aver):
     # plot ELBO loss history during training, removing first 100 epochs from the plot
     mod.plot_history(50)
     plt.legend(labels=['full data training'])
-    plt.savefig(RESULTS_DIR / "plot_history_c2l.png")
+    plt.savefig(save_path / "plot_history_c2l.png")
     plt.close()
 
-    # Save model
-    run_name = RESULTS_DIR / "cell2location_results"
-    os.makedirs(run_name, exist_ok=True)
+    mod.save(f"{save_path}", overwrite=True)
 
-    mod.save(f"{run_name}", overwrite=True)
-
-    # In this section, we export the estimated cell abundance (summary of the posterior distribution).
-    adata_vis = mod.export_posterior(
-        adata_vis, sample_kwargs={'num_samples': 800, 'batch_size': int(mod.adata.n_obs / 100), 'use_gpu': False}
-    )
-
-    # Save anndata object with results
-    adata_file = f"{run_name}/sp.h5ad"
-    adata_vis.write(adata_file)
-
-    mod.plot_QC()
-    plt.savefig(RESULTS_DIR / "cell2location_results" / "QC_spatial_mapping.png")
-    plt.close()
+    return mod
 
 
-def cell2location_xenium(use_gene_intersection: bool = False, cell_types_granularity: str = "cluster"):
+def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool = True,
+                         use_gene_intersection: bool = False, label_key: str = "ClusterName"):
 
     # Path to data
     data_path = Path("../../scratch/lbrunsch/data")
@@ -373,7 +325,7 @@ def cell2location_xenium(use_gene_intersection: bool = False, cell_types_granula
 
     # Examine QC metrics of Xenium data
     print("QC Metrics evaluation for replicates")
-    qc_metrics(annotated_data)
+    # qc_metrics(annotated_data)
 
     # mitochondria-encoded (MT) genes should be removed for spatial mapping
     annotated_data.obsm['mt'] = annotated_data[:, annotated_data.var['mt'].values].X.toarray()
@@ -381,29 +333,68 @@ def cell2location_xenium(use_gene_intersection: bool = False, cell_types_granula
 
     # plot umap as Control for replicate
     print("UMAP for replicates")
-    plot_umap_samples(annotated_data)
+    # plot_umap_samples(annotated_data)
 
-    # plot umap as control for cell types granularity
-    if cell_types_granularity == "taxonomy":
-        # Select Cell Type Nomenclature (1-4)
-        print(len(annotated_ref_seq.obs["TaxonomyRank1"].unique()), annotated_ref_seq.obs["TaxonomyRank1"].unique())
-        print(len(annotated_ref_seq.obs["TaxonomyRank4"].unique()), ": ",
-              annotated_ref_seq.obs["TaxonomyRank4"].unique()[0:10])
-        plot_umap_ref(annotated_ref_seq, cell_taxonomy=["TaxonomyRank1", "TaxonomyRank2", "TaxonomyRank3", "TaxonomyRank4"])
-        annotated_ref_seq, inf_aver = signature_ref(annotated_ref_seq, label="TaxonomyRank3")
+    print(len(annotated_ref_seq.obs[label_key].unique()), annotated_ref_seq.obs[label_key].unique())
+    # plot_umap_ref(annotated_ref_seq, cell_taxonomy=[label_key])
 
-    elif cell_types_granularity == "cluster":
-        print(len(annotated_ref_seq.obs["ClusterName"].unique()), annotated_ref_seq.obs["ClusterName"].unique())
-        print("UMAP for RNA sequencing data")
-        plot_umap_ref(annotated_ref_seq, cell_taxonomy=["ClusterName"])
-        print("Determining Cell Signatures")
-        annotated_ref_seq, inf_aver = signature_ref(annotated_ref_seq, label="ClusterName")
+    # filter genes
+    selected = filter_gene_index(annotated_ref_seq)
+    annotated_ref_seq = annotated_ref_seq[:, selected].copy()
 
+    if extract_signature:
+        print("Running Cell Signature Extraction")
+        mod = signature_ref(annotated_ref_seq, label=label_key, save_path=RESULTS_DIR_SIGNATURE)
     else:
-        raise ValueError("Not implemented yet")
+        mod = cell2location.models.RegressionModel.load(str(RESULTS_DIR_SIGNATURE), annotated_ref_seq)
 
-    print("Running Cell2Location with determined Cell Signature")
-    run_cell2location(annotated_data, inf_aver)
+    # In this section, we export the estimated cell abundance (summary of the posterior distribution).
+    annotated_ref_seq = mod.export_posterior(
+        annotated_ref_seq,
+        sample_kwargs={'num_samples': 1000, 'batch_size': 2500, 'use_gpu': False},
+    )
+
+    # Save anndata object with results
+    adata_file = f"{RESULTS_DIR_SIGNATURE}/sc.h5ad"
+    annotated_ref_seq.write(adata_file)
+
+    # Check issue with inference and noisy diagonal -> because corrected batch effect
+    mod.plot_QC()
+    plt.savefig(RESULTS_DIR_SIGNATURE / "QC_adata_ref.png")
+    plt.close()
+
+    # Reload the data with the define parameters
+    adata_file = f"{RESULTS_DIR_SIGNATURE}/sc.h5ad"
+    adata_ref = sc.read_h5ad(adata_file)
+
+    # export estimated expression in each cluster
+    if 'means_per_cluster_mu_fg' in adata_ref.varm.keys():
+        inf_aver = adata_ref.varm['means_per_cluster_mu_fg'][[f'means_per_cluster_mu_fg_{i}'
+                                                              for i in adata_ref.uns['mod']['factor_names']]].copy()
+    else:
+        inf_aver = adata_ref.var[[f'means_per_cluster_mu_fg_{i}'
+                                  for i in adata_ref.uns['mod']['factor_names']]].copy()
+
+    inf_aver.columns = adata_ref.uns['mod']['factor_names']
+
+    if run_c2l_training:
+        print("Running Cell2Location with determined Cell Signature")
+        mod = run_cell2location(annotated_data, inf_aver, save_path=RESULTS_DIR_C2L)
+    else:
+        mod = cell2location.models.RegressionModel.load(str(RESULTS_DIR_C2L), annotated_data)
+
+    # In this section, we export the estimated cell abundance (summary of the posterior distribution).
+    annotated_data = mod.export_posterior(
+        annotated_data, sample_kwargs={'num_samples': 1000, 'batch_size': 2500, 'use_gpu': False}
+    )
+
+    # Save anndata object with results
+    adata_file = f"{RESULTS_DIR_C2L}/sp.h5ad"
+    annotated_data.write(adata_file)
+
+    mod.plot_QC()
+    plt.savefig(RESULTS_DIR_C2L / "QC_spatial_mapping.png")
+    plt.close()
 
     return 0
 
@@ -412,5 +403,8 @@ if "__main__" == __name__:
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
+    extract_signature_cell = False
+    run_cell2location_training = False
+
     # Perform C2L on xenium data
-    cell2location_xenium()
+    cell2location_xenium(extract_signature_cell, run_cell2location_training)
