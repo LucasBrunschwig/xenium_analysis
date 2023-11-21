@@ -243,16 +243,11 @@ def signature_ref(annotated_ref_seq, label, save_path):
     return mod
 
 
-def run_cell2location(annotated_data, inf_aver, save_path):
+def run_cell2location(adata_vis, inf_aver, save_path):
 
     sc.settings.set_figure_params(dpi=100, color_map='viridis', dpi_save=100,
                                   vector_friendly=True,
                                   facecolor='white')
-
-    # find shared genes and subset both anndata and reference signatures
-    intersect = np.intersect1d(annotated_data.var_names, inf_aver.index)
-    adata_vis = annotated_data[:, intersect].copy()
-    inf_aver = inf_aver.loc[intersect, :].copy()
 
     # prepare anndata for cell2location model
     cell2location.models.Cell2location.setup_anndata(adata=adata_vis, batch_key="sample")
@@ -376,6 +371,11 @@ def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool 
                                   for i in adata_ref.uns['mod']['factor_names']]].copy()
 
     inf_aver.columns = adata_ref.uns['mod']['factor_names']
+
+    # find shared genes and subset both anndata and reference signatures
+    intersect = np.intersect1d(annotated_data.var_names, inf_aver.index)
+    annotated_data = annotated_data[:, intersect].copy()
+    inf_aver = inf_aver.loc[intersect, :].copy()
 
     if run_c2l_training:
         print("Running Cell2Location with determined Cell Signature")
