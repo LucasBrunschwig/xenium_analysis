@@ -293,7 +293,7 @@ def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool 
     path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
     path_replicate_2 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_2"
     paths = [path_replicate_1, path_replicate_2]
-    path_ref = data_path / "Brain_Atlas_RNA_seq/l5_all.loom"
+    path_ref = data_path / "Brain_Atlas_RNA_seq/l5_all_leiden.loom"
 
     # Load Xenium mouse brain replicates
     slides = load_replicates(paths)
@@ -403,8 +403,8 @@ if "__main__" == __name__:
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    extract_signature_cell = False
-    run_cell2location_training = False
+    extract_signature_cell = True
+    run_cell2location_training = True
 
     # Perform C2L on xenium data
-    cell2location_xenium(extract_signature_cell, run_cell2location_training)
+    cell2location_xenium(extract_signature_cell, run_cell2location_training, label_key="Leiden")
