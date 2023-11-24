@@ -19,6 +19,7 @@ import torch
 
 # relative
 from utils import load_xenium_data, load_rna_seq_data
+from leiden_clustering import compute_ref_labels
 
 scvi.settings.seed = 0
 
@@ -230,7 +231,7 @@ def signature_ref(annotated_ref_seq, label, save_path):
     mod.view_anndata_setup()
 
     # train the probabilistic model
-    mod.train(max_epochs=10000, use_gpu=True)
+    mod.train(max_epochs=5000, use_gpu=True)
 
     # Plot History
     mod.plot_history(10)
@@ -265,7 +266,7 @@ def run_cell2location(adata_vis, inf_aver, save_path):
     )
     mod.view_anndata_setup()
 
-    mod.train(max_epochs=10000,
+    mod.train(max_epochs=5000,
               # train using full data (batch_size=None)
               batch_size=None,
               # use all data points in training because
@@ -307,6 +308,9 @@ def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool 
 
     # Load scRNA-seq
     annotated_ref_seq = load_rna_seq_data(path_ref)
+
+    if label_key == "leiden":
+        annotated_ref_seq.obs["leiden"] = compute_ref_labels(annotated_ref_seq)
 
     # Select Genes that are present in both ref and xenium data from the start
     if use_gene_intersection:

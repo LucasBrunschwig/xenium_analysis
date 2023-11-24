@@ -32,6 +32,15 @@ RESULTS_DIR_REF = RESULTS_DIR / "ref"
 os.makedirs(RESULTS_DIR_REF, exist_ok=True)
 
 
+def compute_ref_labels(adata, comp: int =50, n_neighbors: int = 100):
+    adata = adata.copy()
+    sc.pp.pca(adata, n_comps=comp)
+    sc.pp.neighbors(adata, n_neighbors=n_neighbors)  # necessary for UMAP (k-neighbors with weights)
+    sc.tl.umap(adata)
+    sc.tl.leiden(adata)
+
+    return adata.obs["leiden"].values.tolist()
+
 def main():
 
     # Load Data
