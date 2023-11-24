@@ -381,17 +381,20 @@ def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool 
         mod = cell2location.models.RegressionModel.load(str(RESULTS_DIR_C2L), annotated_data)
 
     # In this section, we export the estimated cell abundance (summary of the posterior distribution).
-    annotated_data = mod.export_posterior(
-        annotated_data, sample_kwargs={'num_samples': 500, 'batch_size': 1000, 'use_gpu': False},
-    )
+    for sample in annotated_data.obs["sample"].unique():
+        adata_sample = annotated_data[annotated_data.obs['sample'].isin([sample]), :].copy()
 
-    # Save anndata object with results
-    adata_file = f"{RESULTS_DIR_C2L}/sp.h5ad"
-    annotated_data.write(adata_file)
+        adata_sample = mod.export_posterior(
+            adata_sample, sample_kwargs={'num_samples': 500, 'batch_size': 1000, 'use_gpu': True},
+        )
 
-    mod.plot_QC()
-    plt.savefig(RESULTS_DIR_C2L / "QC_spatial_mapping.png")
-    plt.close()
+        # Save anndata object with results
+        adata_file = f"{RESULTS_DIR_C2L}/sp_{sample}.h5ad"
+        adata_sample.write(adata_file)
+
+        mod.plot_QC()
+        plt.savefig(RESULTS_DIR_C2L / f"QC_spatial_mapping_{sample}.png")
+        plt.close()
 
     return 0
 
