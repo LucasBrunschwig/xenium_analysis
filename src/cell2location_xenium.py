@@ -385,7 +385,7 @@ def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool 
         adata_sample = annotated_data[annotated_data.obs['sample'].isin([sample]), :].copy()
 
         adata_sample = mod.export_posterior(
-            adata_sample, sample_kwargs={'num_samples': 500, 'batch_size': 1000, 'use_gpu': True},
+            adata_sample, sample_kwargs={'num_samples': 500, 'batch_size': len(adata_sample.obs), 'use_gpu': True},
         )
 
         # Save anndata object with results
