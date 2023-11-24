@@ -294,7 +294,7 @@ def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool 
     path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
     path_replicate_2 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_2"
     paths = [path_replicate_1, path_replicate_2]
-    path_ref = data_path / "Brain_Atlas_RNA_seq/l5_all_leiden.loom"
+    path_ref = data_path / "Brain_Atlas_RNA_seq/l5_all.loom"
 
     # Load Xenium mouse brain replicates
     slides = load_replicates(paths)
@@ -312,15 +312,15 @@ def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool 
     if label_key == "leiden":
         annotated_ref_seq.obs["leiden"] = compute_ref_labels(annotated_ref_seq)
 
-    # Select Genes that are present in both ref and xenium data from the start
-    if use_gene_intersection:
-        gene_intersection = set(annotated_data.var.index).intersection(annotated_ref_seq.var.index)
-        is_in = [True if ensemble_id in gene_intersection else False
-                 for ensemble_id in annotated_ref_seq.var.index.tolist()]
-        annotated_ref_seq = annotated_ref_seq[:, is_in]
-        is_in = [True if ensemble_id in gene_intersection else False
-                 for ensemble_id in annotated_data.var.index.tolist()]
-        annotated_data = annotated_data[:, is_in]
+    # # Select Genes that are present in both ref and xenium data from the start
+    # if use_gene_intersection:
+    #     gene_intersection = set(annotated_data.var.index).intersection(annotated_ref_seq.var.index)
+    #     is_in = [True if ensemble_id in gene_intersection else False
+    #              for ensemble_id in annotated_ref_seq.var.index.tolist()]
+    #     annotated_ref_seq = annotated_ref_seq[:, is_in]
+    #     is_in = [True if ensemble_id in gene_intersection else False
+    #              for ensemble_id in annotated_data.var.index.tolist()]
+    #     annotated_data = annotated_data[:, is_in]
 
     # Examine QC metrics of Xenium data
     print("QC Metrics evaluation for replicates")
@@ -411,4 +411,4 @@ if "__main__" == __name__:
     run_cell2location_training = True
 
     # Perform C2L on xenium data
-    cell2location_xenium(extract_signature_cell, run_cell2location_training, label_key="Leiden")
+    cell2location_xenium(extract_signature_cell, run_cell2location_training, label_key="leiden")
