@@ -382,7 +382,7 @@ def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool 
 
     # In this section, we export the estimated cell abundance (summary of the posterior distribution).
     annotated_data = mod.export_posterior(
-        annotated_data, sample_kwargs={'num_samples': 1000, 'batch_size': 2500, 'use_gpu': False}
+        annotated_data, sample_kwargs={'num_samples': 500, 'batch_size': 1000, 'use_gpu': False},
     )
 
     # Save anndata object with results
@@ -400,7 +400,7 @@ if "__main__" == __name__:
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    extract_signature_cell = True
+    extract_signature_cell = False
     run_cell2location_training = True
     n_training = 500
     label_key = "leiden"
