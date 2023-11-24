@@ -204,14 +204,14 @@ def plot_umap_ref(adata, cell_taxonomy: list):
         plt.close()
 
 
-def filter_gene_index(adata, cell_cutoff=5, cell_cutoff2=0.03, nonz_mean_cutoff=1.12):
+def filter_gene_index(adata, cell_cutoff: int = 5, cell_cutoff2: float = 0.03, nonz_mean_cutoff: float = 1.12):
     return filter_genes(adata,
                         cell_count_cutoff=cell_cutoff,
                         cell_percentage_cutoff2=cell_cutoff2,
                         nonz_mean_cutoff=nonz_mean_cutoff)
 
 
-def signature_ref(annotated_ref_seq, label, save_path):
+def signature_ref(annotated_ref_seq, label: str, save_path: Path, n_training: int = 10000):
 
     # prepare anndata for the regression model
     cell2location.models.RegressionModel.setup_anndata(adata=annotated_ref_seq,
@@ -231,7 +231,7 @@ def signature_ref(annotated_ref_seq, label, save_path):
     mod.view_anndata_setup()
 
     # train the probabilistic model
-    mod.train(max_epochs=5000, use_gpu=True)
+    mod.train(max_epochs=n_training, use_gpu=True)
 
     # Plot History
     mod.plot_history(10)
@@ -244,7 +244,7 @@ def signature_ref(annotated_ref_seq, label, save_path):
     return mod
 
 
-def run_cell2location(adata_vis, inf_aver, save_path):
+def run_cell2location(adata_vis, inf_aver, save_path: Path, n_training: int):
 
     sc.settings.set_figure_params(dpi=100, color_map='viridis', dpi_save=100,
                                   vector_friendly=True,
@@ -266,7 +266,7 @@ def run_cell2location(adata_vis, inf_aver, save_path):
     )
     mod.view_anndata_setup()
 
-    mod.train(max_epochs=5000,
+    mod.train(max_epochs=n_training,
               # train using full data (batch_size=None)
               batch_size=None,
               # use all data points in training because
@@ -287,7 +287,8 @@ def run_cell2location(adata_vis, inf_aver, save_path):
 
 
 def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool = True,
-                         use_gene_intersection: bool = False, label_key: str = "ClusterName"):
+                         label_key: str = "ClusterName",
+                         n_training: int = 10000):
 
     # Path to data
     data_path = Path("../../scratch/lbrunsch/data")
@@ -333,7 +334,8 @@ def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool 
 
     if extract_signature:
         print("Running Cell Signature Extraction")
-        mod = signature_ref(annotated_ref_seq, label=label_key, save_path=RESULTS_DIR_SIGNATURE)
+        mod = signature_ref(annotated_ref_seq, label=label_key, save_path=RESULTS_DIR_SIGNATURE,
+                            n_training=n_training)
     else:
         mod = cell2location.models.RegressionModel.load(str(RESULTS_DIR_SIGNATURE), annotated_ref_seq)
 
@@ -373,7 +375,8 @@ def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool 
 
     if run_c2l_training:
         print("Running Cell2Location with determined Cell Signature")
-        mod = run_cell2location(annotated_data, inf_aver, save_path=RESULTS_DIR_C2L)
+        mod = run_cell2location(annotated_data, inf_aver, save_path=RESULTS_DIR_C2L,
+                                n_training=n_training)
     else:
         mod = cell2location.models.RegressionModel.load(str(RESULTS_DIR_C2L), annotated_data)
 
@@ -399,6 +402,10 @@ if "__main__" == __name__:
 
     extract_signature_cell = True
     run_cell2location_training = True
+    n_training = 500
+    label_key = "leiden"
 
     # Perform C2L on xenium data
-    cell2location_xenium(extract_signature_cell, run_cell2location_training, label_key="leiden")
+    cell2location_xenium(extract_signature_cell, run_cell2location_training,
+                         label_key=label_key,
+                         n_training=n_training)
