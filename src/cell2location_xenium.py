@@ -15,11 +15,11 @@ import scvi
 import squidpy as sq
 from scipy.sparse import csr_matrix
 import logging
-import torch
 
 # relative
 from utils import load_xenium_data, load_rna_seq_data
 from leiden_clustering import compute_ref_labels
+from visualization import visualize
 
 scvi.settings.seed = 0
 
@@ -216,11 +216,17 @@ def signature_ref(annotated_ref_seq, label: str, save_path: Path, n_training: in
     # prepare anndata for the regression model
     cell2location.models.RegressionModel.setup_anndata(adata=annotated_ref_seq,
                                                        # 10X reaction / sample / batch
-                                                       # batch_key='SampleID',
+                                                       batch_key='SampleID', # DateCaptured
                                                        # cell type, co-variate used for constructing signatures
                                                        labels_key=label,
                                                        # multiplicative technical effects (platform, 3' - 5', donor)
-                                                       # categorical_covariate_keys=["Age"]  # "ChipID"]
+                                                       categorical_covariate_keys=["Age",
+                                                                                   "AnalysisPool",
+                                                                                   # "Q30 Bases in Barcode"
+                                                                                   # "Q30 Bases in RNA Read"
+                                                                                   # "ChipID",
+                                                                                   # "Flowcell (too much unknown)
+                                                                                   ]
                                                        )
 
     from cell2location.models import RegressionModel
@@ -294,7 +300,8 @@ def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool 
     data_path = Path("../../scratch/lbrunsch/data")
     path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
     path_replicate_2 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_2"
-    paths = [path_replicate_1, path_replicate_2]
+    path_replicate_3 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_3"
+    paths = [path_replicate_1, path_replicate_2, path_replicate_3]
     path_ref = data_path / "Brain_Atlas_RNA_seq/l5_all.loom"
 
     # Load Xenium mouse brain replicates
@@ -315,7 +322,7 @@ def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool 
 
     # Examine QC metrics of Xenium data
     print("QC Metrics evaluation for replicates")
-    # qc_metrics(annotated_data)
+    qc_metrics(annotated_data)
 
     # mitochondria-encoded (MT) genes should be removed for spatial mapping
     annotated_data.obsm['mt'] = annotated_data[:, annotated_data.var['mt'].values].X.toarray()
@@ -323,10 +330,10 @@ def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool 
 
     # plot umap as Control for replicate
     print("UMAP for replicates")
-    # plot_umap_samples(annotated_data)
+    plot_umap_samples(annotated_data)
 
     print(len(annotated_ref_seq.obs[label_key].unique()), annotated_ref_seq.obs[label_key].unique())
-    # plot_umap_ref(annotated_ref_seq, cell_taxonomy=[label_key])
+    plot_umap_ref(annotated_ref_seq, cell_taxonomy=[label_key])
 
     # filter genes
     selected = filter_gene_index(annotated_ref_seq)
@@ -388,6 +395,9 @@ def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool 
             adata_sample, sample_kwargs={'num_samples': 500, 'batch_size': len(adata_sample.obs), 'use_gpu': True},
         )
 
+        adata_sample.obs["c2l_label"] = [cat.split("_")[-1] for cat in adata_sample.obsm["means_cell_abundance_w_sf"].idxmax(axis=1).tolist()]
+        visualize(adata_sample, "c2l_label", save_fig_path=RESULTS_DIR_C2L / f"{sample}_cluster_visualization.png")
+
         # Save anndata object with results
         adata_file = f"{RESULTS_DIR_C2L}/sp_{sample}.h5ad"
         adata_sample.write(adata_file)
@@ -403,9 +413,9 @@ if "__main__" == __name__:
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    extract_signature_cell = False
+    extract_signature_cell = True
     run_cell2location_training = True
-    n_training = 500
+    n_training = 30000
     label_key = "leiden"
 
     # Perform C2L on xenium data

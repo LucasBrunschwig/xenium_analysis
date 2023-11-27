@@ -9,7 +9,7 @@ Description: This file implements visualization methods which represent the spat
 """
 
 import squidpy as sq
-
+import matplotlib.pyplot as plt
 
 def visualize_cortex_layers():
     raise ValueError("Not Implemented")
@@ -19,7 +19,7 @@ def visualize_hippocampus():
     raise ValueError("Not Implemented")
 
 
-def visualize(adata, label_key):
+def visualize(adata, label_key, savefig_path=None):
 
     sq.pl.spatial_scatter(
         adata,
@@ -32,3 +32,7 @@ def visualize(adata, label_key):
         img=False,
         figsize=(15, 15)
     )
+    if savefig_path is not None:
+        plt.savefig(savefig_path)
+        plt.close()
+
