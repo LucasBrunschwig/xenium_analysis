@@ -292,7 +292,9 @@ def run_cell2location(adata_vis, inf_aver, save_path: Path, n_training: int):
     return mod
 
 
-def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool = True,
+def cell2location_xenium(extract_signature: bool = True,
+                         run_c2l_training: bool = True,
+                         run_qc_plots: bool = True,
                          label_key: str = "ClusterName",
                          n_training: int = 10000):
 
@@ -321,19 +323,24 @@ def cell2location_xenium(extract_signature: bool = True, run_c2l_training: bool 
         annotated_ref_seq.obs["leiden"] = compute_ref_labels(annotated_ref_seq)
 
     # Examine QC metrics of Xenium data
-    print("QC Metrics evaluation for replicates")
-    qc_metrics(annotated_data)
+    if run_qc_plots:
+        print("QC Metrics evaluation for replicates")
+        qc_metrics(annotated_data)
+
+        # plot umap as Control for replicate
+        print("UMAP for replicates")
+        plot_umap_samples(annotated_data)
+
+        print(len(annotated_ref_seq.obs[label_key].unique()), annotated_ref_seq.obs[label_key].unique())
+        plot_umap_ref(annotated_ref_seq, cell_taxonomy=[label_key])
 
     # mitochondria-encoded (MT) genes should be removed for spatial mapping
     annotated_data.obsm['mt'] = annotated_data[:, annotated_data.var['mt'].values].X.toarray()
     annotated_data = annotated_data[:, ~annotated_data.var['mt'].values]
 
-    # plot umap as Control for replicate
-    print("UMAP for replicates")
-    plot_umap_samples(annotated_data)
-
-    print(len(annotated_ref_seq.obs[label_key].unique()), annotated_ref_seq.obs[label_key].unique())
-    plot_umap_ref(annotated_ref_seq, cell_taxonomy=[label_key])
+    # mitochondria-encoded (MT) genes should be removed for spatial mapping
+    # annotated_ref_seq.obsm['mt'] = annotated_ref_seq[:, annotated_ref_seq.var['mt'].values].X.toarray()
+    # annotated_ref_seq = annotated_ref_seq[:, ~annotated_ref_seq.var['mt'].values]
 
     # filter genes
     selected = filter_gene_index(annotated_ref_seq)
@@ -413,12 +420,13 @@ if "__main__" == __name__:
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
+    run_qc_plots = False
     extract_signature_cell = True
     run_cell2location_training = True
     n_training = 100
     label_key = "leiden"
 
     # Perform C2L on xenium data
-    cell2location_xenium(extract_signature_cell, run_cell2location_training,
+    cell2location_xenium(extract_signature_cell, run_cell2location_training, run_qc_plots,
                          label_key=label_key,
                          n_training=n_training)
