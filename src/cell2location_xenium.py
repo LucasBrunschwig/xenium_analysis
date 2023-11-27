@@ -221,11 +221,11 @@ def signature_ref(annotated_ref_seq, label: str, save_path: Path, n_training: in
                                                        labels_key=label,
                                                        # multiplicative technical effects (platform, 3' - 5', donor)
                                                        categorical_covariate_keys=["Age",
-                                                                                   "AnalysisPool",
+                                                                                   # "AnalysisPool",
                                                                                    # "Q30 Bases in Barcode"
                                                                                    # "Q30 Bases in RNA Read"
                                                                                    # "ChipID",
-                                                                                   # "Flowcell (too much unknown)
+                                                                                   # "Flowcell
                                                                                    ]
                                                        )
 
@@ -415,7 +415,7 @@ if "__main__" == __name__:
 
     extract_signature_cell = True
     run_cell2location_training = True
-    n_training = 500
+    n_training = 100
     label_key = "leiden"
 
     # Perform C2L on xenium data
