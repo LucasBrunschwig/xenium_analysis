@@ -415,7 +415,7 @@ if "__main__" == __name__:
 
     extract_signature_cell = True
     run_cell2location_training = True
-    n_training = 30000
+    n_training = 500
     label_key = "leiden"
 
     # Perform C2L on xenium data
