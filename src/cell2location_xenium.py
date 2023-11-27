@@ -216,17 +216,17 @@ def signature_ref(annotated_ref_seq, label: str, save_path: Path, n_training: in
     # prepare anndata for the regression model
     cell2location.models.RegressionModel.setup_anndata(adata=annotated_ref_seq,
                                                        # 10X reaction / sample / batch
-                                                       batch_key='SampleID', # DateCaptured
+                                                       batch_key='SampleID',  # DateCaptured / SampleID is similar
                                                        # cell type, co-variate used for constructing signatures
                                                        labels_key=label,
                                                        # multiplicative technical effects (platform, 3' - 5', donor)
-                                                       categorical_covariate_keys=["Age",
+                                                       # categorical_covariate_keys=["Age",
                                                                                    # "AnalysisPool",
                                                                                    # "Q30 Bases in Barcode"
                                                                                    # "Q30 Bases in RNA Read"
                                                                                    # "ChipID",
                                                                                    # "Flowcell
-                                                                                   ]
+                                                       #                            ]
                                                        )
 
     from cell2location.models import RegressionModel
@@ -356,7 +356,7 @@ def cell2location_xenium(extract_signature: bool = True,
     # In this section, we export the estimated cell abundance (summary of the posterior distribution).
     annotated_ref_seq = mod.export_posterior(
         annotated_ref_seq,
-        sample_kwargs={'num_samples': 1000, 'batch_size': 2500, 'use_gpu': False},
+        sample_kwargs={'num_samples': 1000, 'batch_size': 2500, 'use_gpu': True},
     )
 
     # Save anndata object with results
@@ -423,7 +423,7 @@ if "__main__" == __name__:
     run_qc_plots = False
     extract_signature_cell = True
     run_cell2location_training = True
-    n_training = 100
+    n_training = 500
     label_key = "leiden"
 
     # Perform C2L on xenium data
