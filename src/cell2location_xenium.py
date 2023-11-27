@@ -23,7 +23,7 @@ from visualization import visualize
 
 scvi.settings.seed = 0
 
-RESULTS_DIR = Path("../../scratch/lbrunsch/results/cell2location")
+RESULTS_DIR = Path("../../scratch/lbrunsch/results/cell2location_categorical")
 RESULTS_DIR_SIGNATURE = RESULTS_DIR / "adata_ref"
 RESULTS_DIR_C2L = RESULTS_DIR / "cell2location"
 
