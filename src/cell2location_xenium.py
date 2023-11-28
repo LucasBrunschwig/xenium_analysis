@@ -403,7 +403,7 @@ def cell2location_xenium(extract_signature: bool = True,
         )
 
         adata_sample.obs["c2l_label"] = [cat.split("_")[-1] for cat in adata_sample.obsm["means_cell_abundance_w_sf"].idxmax(axis=1).tolist()]
-        visualize(adata_sample, "c2l_label", save_fig_path=RESULTS_DIR_C2L / f"{sample}_cluster_visualization.png")
+        visualize(adata_sample, "c2l_label", savefig_path=RESULTS_DIR_C2L / f"{sample}_cluster_visualization.png")
 
         # Save anndata object with results
         adata_file = f"{RESULTS_DIR_C2L}/sp_{sample}.h5ad"
@@ -423,7 +423,7 @@ if "__main__" == __name__:
     run_qc_plots = False
     extract_signature_cell = True
     run_cell2location_training = True
-    n_training = 500
+    n_training = 100
     label_key = "leiden"
 
     # Perform C2L on xenium data
