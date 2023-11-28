@@ -237,7 +237,7 @@ def signature_ref(annotated_ref_seq, label: str, save_path: Path, n_training: in
     mod.view_anndata_setup()
 
     # train the probabilistic model
-    mod.train(max_epochs=n_training, use_gpu=True)
+    mod.train(max_epochs=5000, use_gpu=True)
 
     # Plot History
     mod.plot_history(10)
@@ -420,10 +420,10 @@ if "__main__" == __name__:
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    run_qc_plots = False
+    run_qc_plots = True
     extract_signature_cell = True
     run_cell2location_training = True
-    n_training = 100
+    n_training = 30000
     label_key = "leiden"
 
     # Perform C2L on xenium data
