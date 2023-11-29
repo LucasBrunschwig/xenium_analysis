@@ -36,7 +36,8 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 os.makedirs(RESULTS_DIR_C2L, exist_ok=True)
 os.makedirs(RESULTS_DIR_SIGNATURE, exist_ok=True)
 
-logging.basicConfig(filename='../../scratch/lbrunsch/results/cell2location/log.txt', level=logging.INFO)
+logging.basicConfig(filename=f'../../scratch/lbrunsch/results/cell2location_neigh{N_NEIGHBORS}_pca{N_COMP}_{SUBSET_LABEL[SUBSET]}/'
+                             f'log_python.txt', level=logging.INFO)
 
 
 HOUSE_KEEPING_GENES_ENSEMBLE_ID = [
