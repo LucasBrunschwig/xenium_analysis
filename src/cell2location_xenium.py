@@ -25,7 +25,7 @@ scvi.settings.seed = 0
 
 N_NEIGHBORS = 13
 N_COMP = 50
-SUBSET = False
+SUBSET = True
 SUBSET_LABEL = {True: "subset", False: ""}
 
 RESULTS_DIR = Path(f"../../scratch/lbrunsch/results/cell2location_neigh{N_NEIGHBORS}_pca{N_COMP}_{SUBSET_LABEL[SUBSET]}")
@@ -326,6 +326,11 @@ def cell2location_xenium(extract_signature: bool = True,
 
     if label_key == "leiden":
         annotated_ref_seq_copy = annotated_ref_seq.copy()
+
+        if SUBSET:  # Compute Leiden on the Panel Genes
+            intersect = np.intersect1d(annotated_data.var_names, annotated_ref_seq_copy.var_names)
+            annotated_ref_seq_copy = annotated_ref_seq[:, intersect]
+
         annotated_ref_seq_copy = preprocess_transcriptomics(annotated_ref_seq_copy)
         annotated_ref_seq.obs["leiden"] = compute_ref_labels(annotated_ref_seq_copy,
                                                              n_neighbors=N_NEIGHBORS,
