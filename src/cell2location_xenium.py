@@ -17,13 +17,18 @@ from scipy.sparse import csr_matrix
 import logging
 
 # relative
-from utils import load_xenium_data, load_rna_seq_data
+from utils import load_xenium_data, load_rna_seq_data, preprocess_transcriptomics
 from leiden_clustering import compute_ref_labels
 from visualization import visualize
 
 scvi.settings.seed = 0
 
-RESULTS_DIR = Path("../../scratch/lbrunsch/results/cell2location_categorical")
+N_NEIGHBORS = 13
+N_COMP = 50
+SUBSET = False
+SUBSET_LABEL = {True: "subset", False: ""}
+
+RESULTS_DIR = Path(f"../../scratch/lbrunsch/results/cell2location_neigh{N_NEIGHBORS}_pca{N_COMP}_{SUBSET_LABEL[SUBSET]}")
 RESULTS_DIR_SIGNATURE = RESULTS_DIR / "adata_ref"
 RESULTS_DIR_C2L = RESULTS_DIR / "cell2location"
 
@@ -320,7 +325,12 @@ def cell2location_xenium(extract_signature: bool = True,
     annotated_ref_seq = load_rna_seq_data(path_ref)
 
     if label_key == "leiden":
-        annotated_ref_seq.obs["leiden"] = compute_ref_labels(annotated_ref_seq)
+        annotated_ref_seq_copy = annotated_ref_seq.copy()
+        annotated_ref_seq_copy = preprocess_transcriptomics(annotated_ref_seq_copy)
+        annotated_ref_seq.obs["leiden"] = compute_ref_labels(annotated_ref_seq_copy,
+                                                             n_neighbors=N_NEIGHBORS,
+                                                             n_comp=N_COMP
+                                                             )
 
     # Examine QC metrics of Xenium data
     if run_qc_plots:
@@ -420,7 +430,7 @@ if "__main__" == __name__:
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    run_qc_plots = True
+    run_qc_plots = False
     extract_signature_cell = True
     run_cell2location_training = True
     n_training = 30000

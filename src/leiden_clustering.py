@@ -23,8 +23,11 @@ import seaborn as sns
 from utils import load_rna_seq_data, load_xenium_data, preprocess_transcriptomics, get_name_from_path
 from visualization import visualize
 
+N_NEIGHBORS = 50
+N_COMPONENTS = 50
+
 # Make directory
-RESULTS_DIR = Path("../../scratch/lbrunsch/results/leiden_clustering")
+RESULTS_DIR = Path(f"../../scratch/lbrunsch/results/leiden_clustering/n_neighbors{N_NEIGHBORS}_n_pca{N_COMPONENTS}")
 os.makedirs(RESULTS_DIR, exist_ok=True)
 RESULTS_DIR_XENIUM = RESULTS_DIR / "xenium"
 os.makedirs(RESULTS_DIR_XENIUM, exist_ok=True)
@@ -32,14 +35,15 @@ RESULTS_DIR_REF = RESULTS_DIR / "ref"
 os.makedirs(RESULTS_DIR_REF, exist_ok=True)
 
 
-def compute_ref_labels(adata, comp: int =50, n_neighbors: int = 100):
+def compute_ref_labels(adata, n_comp: int = 50, n_neighbors: int = 13):
     adata = adata.copy()
-    sc.pp.pca(adata, n_comps=comp)
+    sc.pp.pca(adata, n_comps=n_comp)
     sc.pp.neighbors(adata, n_neighbors=n_neighbors)  # necessary for UMAP (k-neighbors with weights)
     sc.tl.umap(adata)
     sc.tl.leiden(adata)
 
     return adata.obs["leiden"].values.tolist()
+
 
 def main():
 
@@ -60,11 +64,11 @@ def main():
     adata_xenium.var.index = adata_xenium.var["SYMBOL"]
     adata_ref.var.index = adata_ref.var["SYMBOL"]
 
-    n_comps = [50]
+    n_comps = [N_COMPONENTS]
     for comp in n_comps:
         print(f"Adata Ref: {comp}")
         sc.pp.pca(adata_ref, n_comps=comp)
-        sc.pp.neighbors(adata_ref, n_neighbors=100)  # necessary for UMAP (k-neighbors with weights)
+        sc.pp.neighbors(adata_ref, n_neighbors=N_NEIGHBORS)  # necessary for UMAP (k-neighbors with weights)
         sc.tl.umap(adata_ref)
         sc.tl.leiden(adata_ref)
         sc.tl.rank_genes_groups(adata_ref, groupby="leiden")
@@ -89,35 +93,34 @@ def main():
         plt.savefig(RESULTS_DIR_REF / f"total_rank_gene_groups_ref_PCA{comp}.png", bbox_inches="tight")
         plt.close()
 
-    # # Perform data processing
-    # adata_xenium = preprocess_transcriptomics(adata_xenium)
-    #
-    # # Use various principal components to evaluate
-    # n_comps = [10, 20, 30, 40, 50, None]
-    # n_neighbors = 100
+    # Perform data processing
+    adata_xenium = preprocess_transcriptomics(adata_xenium)
 
-    # for n_comp in n_comps:
-    #     print(f"Performing Clustering on Xenium {n_comp}")
-    #     if n_comps is not None:
-    #         sc.pp.pca(adata_xenium, n_comps=n_comp)  # even though not many genes -> noise reduction / batch effect
-    #     sc.pp.neighbors(adata_xenium, n_neighbors=n_neighbors)  # necessary for UMAP (k-neighbors with weights)
-    #     sc.tl.umap(adata_xenium)
-    #     sc.tl.leiden(adata_xenium)
-    #
-    #     sc.tl.rank_genes_groups(adata_xenium, groupby="leiden")
-    #     sc.pl.rank_genes_groups(adata_xenium, show=False)
-    #     plt.savefig(RESULTS_DIR_XENIUM / f"rank_genes_group_{get_name_from_path(path_replicate_1)}_PCA{n_comp}_Neighbors{n_neighbors}.png",
-    #                 bbox_inches="tight")
-    #     plt.close()
-    #
-    #     n_categories = adata_xenium.obs['leiden'].nunique()
-    #     if n_categories > 26:
-    #         palette = sns.color_palette("hls", n_categories)
-    #         adata_xenium.uns['leiden_colors'] = palette
-    #
-    #     visualize(adata_xenium, label_key="leiden")
-    #     plt.savefig(RESULTS_DIR_XENIUM / f"leiden_{get_name_from_path(path_replicate_1)}_PCA{n_comp}_Neighbors{n_neighbors}.png",)
-    #     plt.close()
+    # Use various principal components to evaluate
+    n_comps = [40, 50, None]
+
+    for n_comp in n_comps:
+        print(f"Performing Clustering on Xenium {n_comp}")
+        if n_comps is not None:
+            sc.pp.pca(adata_xenium, n_comps=n_comp)  # even though not many genes -> noise reduction / batch effect
+        sc.pp.neighbors(adata_xenium, n_neighbors=N_NEIGHBORS)  # necessary for UMAP (k-neighbors with weights)
+        sc.tl.umap(adata_xenium)
+        sc.tl.leiden(adata_xenium)
+
+        sc.tl.rank_genes_groups(adata_xenium, groupby="leiden")
+        sc.pl.rank_genes_groups(adata_xenium, show=False)
+        plt.savefig(RESULTS_DIR_XENIUM / f"rank_genes_group_{get_name_from_path(path_replicate_1)}_PCA{n_comp}_Neighbors{N_NEIGHBORS}.png",
+                    bbox_inches="tight")
+        plt.close()
+
+        n_categories = adata_xenium.obs['leiden'].nunique()
+        if n_categories > 26:
+            palette = sns.color_palette("hls", n_categories)
+            adata_xenium.uns['leiden_colors'] = palette
+
+        visualize(adata_xenium, label_key="leiden")
+        plt.savefig(RESULTS_DIR_XENIUM / f"leiden_{get_name_from_path(path_replicate_1)}_PCA{n_comp}_Neighbors{N_NEIGHBORS}.png",)
+        plt.close()
 
     return 0
 
