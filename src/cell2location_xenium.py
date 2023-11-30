@@ -288,7 +288,7 @@ def cell2location_xenium(run_qc_plots_: bool = True, run_extract_signature_: boo
     path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
     path_replicate_2 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_2"
     path_replicate_3 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_3"
-    paths = [path_replicate_1,] # path_replicate_2, path_replicate_3]
+    paths = [path_replicate_1, path_replicate_2, path_replicate_3]
     path_ref = data_path / "Brain_Atlas_RNA_seq/l5_all.loom"
 
     # Load Xenium mouse brain replicates
@@ -444,7 +444,7 @@ if "__main__" == __name__:
     # Specific to Leiden Clustering
     n_comp = 50
     n_neighbors = 13
-    subset = False
+    subset = True
 
     # Build directory results
     main_dir = build_results_dir(label_key, n_neighbors, n_comp, subset)
