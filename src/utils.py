@@ -56,48 +56,48 @@ def format_xenium_adata(path: Path, tag: str, output_path: str):
     except Exception as e:
         panel_info['Gene'] = panel_info['Name']
 
-    dict_annotation = dict(zip(panel_info['Gene'],panel_info['Annotation']))
-    dict_ENSEMBL = dict(zip(panel_info['Gene'],panel_info['Ensembl ID']))
+    dict_annotation = dict(zip(panel_info['Gene'], panel_info['Annotation']))
+    dict_ENSEMBL = dict(zip(panel_info['Gene'], panel_info['Ensembl ID']))
     adata.var['Annotation'] = adata.var.index.map(dict_annotation)
     adata.var['Ensembl ID'] = adata.var.index.map(dict_ENSEMBL)
     adata.var['in_panel'] = adata.var.index.isin(panel_info['Gene'])
     transcripts = pd.read_csv(path / 'transcripts.csv', index_col=0)
     adata.uns['spots'] = transcripts
     try:
-        UMAP=pd.read_csv(path+'/analysis/umap/gene_expression_2_components/projection.csv',index_col=0)
+        UMAP = pd.read_csv(path + '/analysis/umap/gene_expression_2_components/projection.csv', index_col=0)
         adata.obsm['X_umap'] = np.array(UMAP)
-        TSNE=pd.read_csv(path+'/analysis/tsne/gene_expression_2_components/projection.csv',index_col=0)
+        TSNE = pd.read_csv(path + '/analysis/tsne/gene_expression_2_components/projection.csv', index_col=0)
         adata.obsm['X_tsne'] = np.array(TSNE)
-        PCA=pd.read_csv(path+'/analysis/PCA/gene_expression_10_components/projection.csv',index_col=0)
+        PCA = pd.read_csv(path + '/analysis/PCA/gene_expression_10_components/projection.csv', index_col=0)
         adata.obsm['X_pca'] = np.array(PCA)
-        clusters=pd.read_csv(path+'/analysis/clustering/gene_expression_graphclust/clusters.csv',index_col=0)
-        adata.obs['graph_clusters']=list(clusters['Cluster'].astype(str))
-        kmeans2=pd.read_csv(path+'/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv',index_col=0)
-        adata.obs['kmeans2_clusters']=list(kmeans2['Cluster'].astype(str))
-        kmeans3=pd.read_csv(path+'/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv',index_col=0)
-        adata.obs['kmeans3_clusters']=list(kmeans3['Cluster'].astype(str))
-        kmeans4=pd.read_csv(path+'/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv',index_col=0)
-        adata.obs['kmeans4_clusters']=list(kmeans4['Cluster'].astype(str))
-        kmeans5=pd.read_csv(path+'/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv',index_col=0)
-        adata.obs['kmeans5_clusters']=list(kmeans5['Cluster'].astype(str))
-        kmeans6=pd.read_csv(path+'/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv',index_col=0)
-        adata.obs['kmeans6_clusters']=list(kmeans6['Cluster'].astype(str))
-        kmeans7=pd.read_csv(path+'/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv',index_col=0)
-        adata.obs['kmeans7_clusters']=list(kmeans7['Cluster'].astype(str))
-        kmeans8=pd.read_csv(path+'/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv',index_col=0)
-        adata.obs['kmeans8_clusters']=list(kmeans8['Cluster'].astype(str))
-        kmeans9=pd.read_csv(path+'/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv',index_col=0)
-        adata.obs['kmeans9_clusters']=list(kmeans9['Cluster'].astype(str))
-        kmeans10=pd.read_csv(path+'/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv',index_col=0)
-        adata.obs['kmeans10_clusters']=list(kmeans10['Cluster'].astype(str))
+        clusters = pd.read_csv(path + '/analysis/clustering/gene_expression_graphclust/clusters.csv', index_col=0)
+        adata.obs['graph_clusters'] = list(clusters['Cluster'].astype(str))
+        kmeans2 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
+        adata.obs['kmeans2_clusters'] = list(kmeans2['Cluster'].astype(str))
+        kmeans3 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
+        adata.obs['kmeans3_clusters'] = list(kmeans3['Cluster'].astype(str))
+        kmeans4 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
+        adata.obs['kmeans4_clusters'] = list(kmeans4['Cluster'].astype(str))
+        kmeans5 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
+        adata.obs['kmeans5_clusters'] = list(kmeans5['Cluster'].astype(str))
+        kmeans6 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
+        adata.obs['kmeans6_clusters'] = list(kmeans6['Cluster'].astype(str))
+        kmeans7 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
+        adata.obs['kmeans7_clusters'] = list(kmeans7['Cluster'].astype(str))
+        kmeans8 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
+        adata.obs['kmeans8_clusters'] = list(kmeans8['Cluster'].astype(str))
+        kmeans9 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
+        adata.obs['kmeans9_clusters'] = list(kmeans9['Cluster'].astype(str))
+        kmeans10 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv',
+                               index_col=0)
+        adata.obs['kmeans10_clusters'] = list(kmeans10['Cluster'].astype(str))
     except:
         print('UMAP and clusters_could not be recovered')
-    adata.write(output_path+tag+'.h5ad')
+    adata.write(output_path + tag + '.h5ad')
     return adata
 
 
 def load_xenium_data(path):
-
     # Load h5 file for transcriptomics matrix data
     adata = sc.read_10x_h5(os.path.join(path, "cell_feature_matrix.h5"))
 
@@ -108,6 +108,8 @@ def load_xenium_data(path):
     # Combine both information
     df.set_index(adata.obs_names, inplace=True)
     adata.obs = df
+    adata.obs["og_index"] = adata.obs.index
+    adata.obs_names_make_unique()
 
     # Format Spatial information for plotting
     adata.obsm["spatial"] = adata.obs[["x_centroid", "y_centroid"]].copy().to_numpy()
@@ -115,6 +117,9 @@ def load_xenium_data(path):
     # Ensure unique index for gene
     adata.var["SYMBOL"] = adata.var.index
     adata.var.set_index("gene_ids", drop=True, inplace=True)
+
+    # Mark the 'mt' gene
+    adata.var['mt'] = [gene.startswith('mt-') for gene in adata.var['SYMBOL']]
 
     return adata
 
@@ -126,21 +131,25 @@ def load_rna_seq_data(path):
     adata.var["SYMBOL"] = adata.var.index
     adata.var.set_index("Accession", drop=True, inplace=True)
 
-    adata.obs["SYMBOL"] = adata.obs.index
+    adata.obs["og_index"] = adata.obs.index
     adata.obs_names_make_unique()
+
+    # Mark the 'mt' gene
+    adata.var['mt'] = [gene.startswith('mt-') for gene in adata.var['SYMBOL']]
 
     return adata
 
 
-def preprocess_transcriptomics(adata):
+def preprocess_transcriptomics(adata, filter_: bool = True):
     """Perform normalization on transcriptomics data obtained through xenium
 
         (1) Normalize total (2) log(X+1)
     """
 
     # Filter adata by number of counts per cell and number of gene abundance across cells
-    sc.pp.filter_cells(adata, min_counts=10)
-    sc.pp.filter_genes(adata, min_cells=5)
+    if filter_:
+        sc.pp.filter_cells(adata, min_counts=10)
+        sc.pp.filter_genes(adata, min_cells=5)
 
     # Normalize
     adata.layers["counts"] = adata.X.copy()

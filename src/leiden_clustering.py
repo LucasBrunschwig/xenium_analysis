@@ -36,17 +36,16 @@ os.makedirs(RESULTS_DIR_REF, exist_ok=True)
 
 
 def compute_ref_labels(adata, n_comp: int = 50, n_neighbors: int = 13):
-    adata = adata.copy()
-    sc.pp.pca(adata, n_comps=n_comp)
-    sc.pp.neighbors(adata, n_neighbors=n_neighbors)  # necessary for UMAP (k-neighbors with weights)
-    sc.tl.umap(adata)
-    sc.tl.leiden(adata)
+    adata_ = adata.copy()
+    sc.pp.pca(adata_, n_comps=n_comp)
+    sc.pp.neighbors(adata_, n_neighbors=n_neighbors)  # necessary for UMAP (k-neighbors with weights)
+    sc.tl.umap(adata_)
+    sc.tl.leiden(adata_)
 
     return adata.obs["leiden"].values.tolist()
 
 
 def main():
-
     # Load Data
     data_path = Path("../../scratch/lbrunsch/data")
 
@@ -109,8 +108,9 @@ def main():
 
         sc.tl.rank_genes_groups(adata_xenium, groupby="leiden")
         sc.pl.rank_genes_groups(adata_xenium, show=False)
-        plt.savefig(RESULTS_DIR_XENIUM / f"rank_genes_group_{get_name_from_path(path_replicate_1)}_PCA{n_comp}_Neighbors{N_NEIGHBORS}.png",
-                    bbox_inches="tight")
+        plt.savefig(
+            RESULTS_DIR_XENIUM / f"rank_genes_group_{get_name_from_path(path_replicate_1)}_PCA{n_comp}_Neighbors{N_NEIGHBORS}.png",
+            bbox_inches="tight")
         plt.close()
 
         n_categories = adata_xenium.obs['leiden'].nunique()
@@ -119,13 +119,12 @@ def main():
             adata_xenium.uns['leiden_colors'] = palette
 
         visualize(adata_xenium, label_key="leiden")
-        plt.savefig(RESULTS_DIR_XENIUM / f"leiden_{get_name_from_path(path_replicate_1)}_PCA{n_comp}_Neighbors{N_NEIGHBORS}.png",)
+        plt.savefig(
+            RESULTS_DIR_XENIUM / f"leiden_{get_name_from_path(path_replicate_1)}_PCA{n_comp}_Neighbors{N_NEIGHBORS}.png", )
         plt.close()
 
     return 0
 
 
 if "__main__" == __name__:
-
     main()
-

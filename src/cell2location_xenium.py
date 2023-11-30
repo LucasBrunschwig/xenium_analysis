@@ -9,9 +9,9 @@ import matplotlib as mpl
 import seaborn as sns
 import cell2location
 from cell2location.utils.filtering import filter_genes
+from cell2location.models import RegressionModel
 import scanpy as sc
 import numpy as np
-import scvi
 import squidpy as sq
 from scipy.sparse import csr_matrix
 import logging
@@ -21,64 +21,17 @@ from utils import load_xenium_data, load_rna_seq_data, preprocess_transcriptomic
 from leiden_clustering import compute_ref_labels
 from visualization import visualize
 
-scvi.settings.seed = 0
-
-N_NEIGHBORS = 13
-N_COMP = 50
-SUBSET = True
-SUBSET_LABEL = {True: "subset", False: ""}
-
-RESULTS_DIR = Path(f"../../scratch/lbrunsch/results/cell2location_neigh{N_NEIGHBORS}_pca{N_COMP}_{SUBSET_LABEL[SUBSET]}")
-RESULTS_DIR_SIGNATURE = RESULTS_DIR / "adata_ref"
-RESULTS_DIR_C2L = RESULTS_DIR / "cell2location"
-
-os.makedirs(RESULTS_DIR, exist_ok=True)
-os.makedirs(RESULTS_DIR_C2L, exist_ok=True)
-os.makedirs(RESULTS_DIR_SIGNATURE, exist_ok=True)
-
-logging.basicConfig(filename=f'../../scratch/lbrunsch/results/cell2location_neigh{N_NEIGHBORS}_pca{N_COMP}_{SUBSET_LABEL[SUBSET]}/'
-                             f'log_python.txt', level=logging.INFO)
-
-
-HOUSE_KEEPING_GENES_ENSEMBLE_ID = [
-    "ENSMUSG00000005610",
-    "ENSMUSG00000005779",
-    "ENSMUSG00000010376",
-    "ENSMUSG00000014294",
-    "ENSMUSG00000014769",
-    "ENSMUSG00000015671",
-    "ENSMUSG00000018286",
-    "ENSMUSG00000018567",
-    "ENSMUSG00000019362",
-    "ENSMUSG00000024248",
-    "ENSMUSG00000024870",
-    "ENSMUSG00000026750",
-    "ENSMUSG00000028452",
-    "ENSMUSG00000028837",
-    "ENSMUSG00000029649",
-    "ENSMUSG00000031532",
-    "ENSMUSG00000032301",
-    "ENSMUSG00000035242",
-    "ENSMUSG00000035530",
-    "ENSMUSG00000041881",
-    "ENSMUSG00000048076",
-    "ENSMUSG00000060073",
-    "ENSMUSG00000069744",
-    "ENSMUSG00000072772",
-    "ENSMUSG00000078812",
-    "ENSMUSG00000084786"
-]
+RESULTS_DIR = Path()
+RESULTS_DIR_SIGNATURE = Path()
+RESULTS_DIR_C2L = Path()
 
 
 def load_replicates(paths: list):
-
     adata_list = []
     for path in paths:
         adata = load_xenium_data(path)
         adata.obs['sample'] = str(path).split(os.sep)[-1]
         adata.X = csr_matrix(adata.X)
-        adata.var['mt'] = [gene.startswith('mt-') for gene in adata.var['SYMBOL']]
-        adata.obs['mt_frac'] = adata[:, adata.var['mt'].tolist()].X.sum(1).A.squeeze() / adata.obs['total_counts']
 
         # add sample name to obs names
         adata.obs["sample"] = [str(i) for i in adata.obs['sample']]
@@ -93,7 +46,7 @@ def load_replicates(paths: list):
 def qc_metrics(adata):
     r""" This function calculates QC metrics
 
-    :param adata: receive AnnData object
+    :param adata: AnnData object
     """
     adata_vis = adata.copy()
 
@@ -160,7 +113,6 @@ def qc_metrics(adata):
 
 
 def plot_umap_samples(adata_vis):
-
     adata_vis_plt = adata_vis.copy()
 
     # log(p + 1)
@@ -185,7 +137,19 @@ def plot_umap_samples(adata_vis):
 
 
 def plot_umap_ref(adata, cell_taxonomy: list):
+    """
+
+    Parameters
+    ----------
+    adata
+    cell_taxonomy
+
+    Returns
+    -------
+
+    """
     adata_vis_plt = adata.copy()
+
     # log(p + 1)
     sc.pp.log1p(adata_vis_plt)
 
@@ -217,7 +181,19 @@ def filter_gene_index(adata, cell_cutoff: int = 5, cell_cutoff2: float = 0.03, n
                         nonz_mean_cutoff=nonz_mean_cutoff)
 
 
-def signature_ref(annotated_ref_seq, label: str, save_path: Path, n_training: int = 10000):
+def signature_ref(annotated_ref_seq, label: str, save_path: Path):
+    """
+
+    Parameters
+    ----------
+    annotated_ref_seq: AnnData object containing transcriptomics data
+    label: the column name representing all dimensions
+    save_path: the path to save the model
+
+    Returns
+    -------
+
+    """
 
     # prepare anndata for the regression model
     cell2location.models.RegressionModel.setup_anndata(adata=annotated_ref_seq,
@@ -227,15 +203,13 @@ def signature_ref(annotated_ref_seq, label: str, save_path: Path, n_training: in
                                                        labels_key=label,
                                                        # multiplicative technical effects (platform, 3' - 5', donor)
                                                        # categorical_covariate_keys=["Age",
-                                                                                   # "AnalysisPool",
-                                                                                   # "Q30 Bases in Barcode"
-                                                                                   # "Q30 Bases in RNA Read"
-                                                                                   # "ChipID",
-                                                                                   # "Flowcell
+                                                       #                             "AnalysisPool",
+                                                       #                             "Q30 Bases in Barcode"
+                                                       #                             "Q30 Bases in RNA Read"
+                                                       #                             "ChipID",
+                                                       #                             "Flowcell
                                                        #                            ]
                                                        )
-
-    from cell2location.models import RegressionModel
 
     mod = RegressionModel(annotated_ref_seq)
 
@@ -245,18 +219,31 @@ def signature_ref(annotated_ref_seq, label: str, save_path: Path, n_training: in
     # train the probabilistic model
     mod.train(max_epochs=5000, use_gpu=True)
 
-    # Plot History
+    # Plot History and save figure
     mod.plot_history(10)
     plt.savefig(save_path / "adata_signature_training.png")
     plt.close()
 
-    # Save model
+    # Save model and anndata
     mod.save(f"{save_path}", overwrite=True)
 
     return mod
 
 
-def run_cell2location(adata_vis, inf_aver, save_path: Path, n_training: int):
+def run_cell2location(adata_vis, inf_aver, save_path: Path, n_training_: int):
+    """
+
+    Parameters
+    ----------
+    adata_vis
+    inf_aver
+    save_path
+    n_training_
+
+    Returns
+    -------
+
+    """
 
     sc.settings.set_figure_params(dpi=100, color_map='viridis', dpi_save=100,
                                   vector_friendly=True,
@@ -269,47 +256,39 @@ def run_cell2location(adata_vis, inf_aver, save_path: Path, n_training: int):
     mod = cell2location.models.Cell2location(
         adata_vis,
         cell_state_df=inf_aver,
-        # the expected average cell abundance: tissue-dependent
-        # hyper-prior which can be estimated from paired histology:
         N_cells_per_location=1,
-        # hyperparameter controlling normalisation of
-        # within-experiment variation in RNA detection:
         detection_alpha=20
     )
     mod.view_anndata_setup()
 
-    mod.train(max_epochs=n_training,
-              # train using full data (batch_size=None)
+    mod.train(max_epochs=n_training_,
               batch_size=None,
-              # use all data points in training because
-              # we need to estimate cell abundance at all locations
               train_size=1,
               use_gpu=True,
               )
 
-    # plot ELBO loss history during training, removing first 100 epochs from the plot
+    # plot loss history
     mod.plot_history(50)
     plt.legend(labels=['full data training'])
     plt.savefig(save_path / "plot_history_c2l.png")
     plt.close()
 
+    # save model and transcriptomic data
     mod.save(f"{save_path}", overwrite=True)
 
     return mod
 
 
-def cell2location_xenium(extract_signature: bool = True,
-                         run_c2l_training: bool = True,
-                         run_qc_plots: bool = True,
-                         label_key: str = "ClusterName",
-                         n_training: int = 10000):
-
+def cell2location_xenium(run_qc_plots_: bool = True, run_extract_signature_: bool = True,
+                         run_c2l_training_: bool = True, n_training_: int = 10000,
+                         label_key_: str = "ClusterName", n_comp_: int = 50,
+                         n_neighbors_: int = 13, subset_: bool = False):
     # Path to data
     data_path = Path("../../scratch/lbrunsch/data")
     path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
     path_replicate_2 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_2"
     path_replicate_3 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_3"
-    paths = [path_replicate_1, path_replicate_2, path_replicate_3]
+    paths = [path_replicate_1,] # path_replicate_2, path_replicate_3]
     path_ref = data_path / "Brain_Atlas_RNA_seq/l5_all.loom"
 
     # Load Xenium mouse brain replicates
@@ -325,21 +304,12 @@ def cell2location_xenium(extract_signature: bool = True,
     # Load scRNA-seq
     annotated_ref_seq = load_rna_seq_data(path_ref)
 
-    if label_key == "leiden":
-        annotated_ref_seq_copy = annotated_ref_seq.copy()
-
-        if SUBSET:  # Compute Leiden on the Panel Genes
-            intersect = np.intersect1d(annotated_data.var_names, annotated_ref_seq_copy.var_names)
-            annotated_ref_seq_copy = annotated_ref_seq[:, intersect]
-
-        annotated_ref_seq_copy = preprocess_transcriptomics(annotated_ref_seq_copy)
-        annotated_ref_seq.obs["leiden"] = compute_ref_labels(annotated_ref_seq_copy,
-                                                             n_neighbors=N_NEIGHBORS,
-                                                             n_comp=N_COMP
-                                                             )
+    if subset_:
+        intersect = np.intersect1d(annotated_data.var_names, annotated_ref_seq.var_names)
+        annotated_ref_seq = annotated_ref_seq[:, intersect]
 
     # Examine QC metrics of Xenium data
-    if run_qc_plots:
+    if run_qc_plots_:
         print("QC Metrics evaluation for replicates")
         qc_metrics(annotated_data)
 
@@ -347,29 +317,35 @@ def cell2location_xenium(extract_signature: bool = True,
         print("UMAP for replicates")
         plot_umap_samples(annotated_data)
 
-        print(len(annotated_ref_seq.obs[label_key].unique()), annotated_ref_seq.obs[label_key].unique())
-        plot_umap_ref(annotated_ref_seq, cell_taxonomy=[label_key])
+        if label_key_ != "leiden":
+            print(len(annotated_ref_seq.obs[label_key_].unique()), annotated_ref_seq.obs[label_key_].unique())
+            plot_umap_ref(annotated_ref_seq, cell_taxonomy=[label_key_])
 
     # mitochondria-encoded (MT) genes should be removed for spatial mapping
     annotated_data.obsm['mt'] = annotated_data[:, annotated_data.var['mt'].values].X.toarray()
     annotated_data = annotated_data[:, ~annotated_data.var['mt'].values]
-
-    # mitochondria-encoded (MT) genes should be removed for spatial mapping
-    # annotated_ref_seq.obsm['mt'] = annotated_ref_seq[:, annotated_ref_seq.var['mt'].values].X.toarray()
-    # annotated_ref_seq = annotated_ref_seq[:, ~annotated_ref_seq.var['mt'].values]
+    annotated_ref_seq.obsm['mt'] = annotated_ref_seq[:, annotated_ref_seq.var['mt'].values].X.toarray()
+    annotated_ref_seq = annotated_ref_seq[:, ~annotated_ref_seq.var['mt'].values]
 
     # filter genes
     selected = filter_gene_index(annotated_ref_seq)
     annotated_ref_seq = annotated_ref_seq[:, selected].copy()
 
-    if extract_signature:
+    if label_key_ == "leiden":
+        annotated_ref_seq_copy = annotated_ref_seq.copy()
+        annotated_ref_seq_copy = preprocess_transcriptomics(annotated_ref_seq_copy, filter_=False)
+        annotated_ref_seq.obs["leiden"] = compute_ref_labels(annotated_ref_seq_copy, n_neighbors_, n_comp_)
+
+        print(len(annotated_ref_seq.obs[label_key_].unique()), annotated_ref_seq.obs[label_key_].unique())
+        plot_umap_ref(annotated_ref_seq, cell_taxonomy=[label_key_])
+
+    if run_extract_signature_:
         print("Running Cell Signature Extraction")
-        mod = signature_ref(annotated_ref_seq, label=label_key, save_path=RESULTS_DIR_SIGNATURE,
-                            n_training=n_training)
+        mod = signature_ref(annotated_ref_seq, label=label_key_, save_path=RESULTS_DIR_SIGNATURE)
     else:
         mod = cell2location.models.RegressionModel.load(str(RESULTS_DIR_SIGNATURE), annotated_ref_seq)
 
-    # In this section, we export the estimated cell abundance (summary of the posterior distribution).
+    # export the estimated cell abundance (summary of the posterior distribution).
     annotated_ref_seq = mod.export_posterior(
         annotated_ref_seq,
         sample_kwargs={'num_samples': 1000, 'batch_size': 2500, 'use_gpu': True},
@@ -384,33 +360,29 @@ def cell2location_xenium(extract_signature: bool = True,
     plt.savefig(RESULTS_DIR_SIGNATURE / "QC_adata_ref.png")
     plt.close()
 
-    # Reload the data with the define parameters
-    adata_file = f"{RESULTS_DIR_SIGNATURE}/sc.h5ad"
-    adata_ref = sc.read_h5ad(adata_file)
-
-    # export estimated expression in each cluster
-    if 'means_per_cluster_mu_fg' in adata_ref.varm.keys():
-        inf_aver = adata_ref.varm['means_per_cluster_mu_fg'][[f'means_per_cluster_mu_fg_{i}'
-                                                              for i in adata_ref.uns['mod']['factor_names']]].copy()
+    # Format signature expression for each cluster
+    if 'means_per_cluster_mu_fg' in annotated_ref_seq.varm.keys():
+        inf_aver = annotated_ref_seq.varm['means_per_cluster_mu_fg'][[f'means_per_cluster_mu_fg_{i}'
+                                                                      for i in annotated_ref_seq.uns['mod'][
+                                                                          'factor_names']]].copy()
     else:
-        inf_aver = adata_ref.var[[f'means_per_cluster_mu_fg_{i}'
-                                  for i in adata_ref.uns['mod']['factor_names']]].copy()
+        inf_aver = annotated_ref_seq.var[[f'means_per_cluster_mu_fg_{i}'
+                                          for i in annotated_ref_seq.uns['mod']['factor_names']]].copy()
 
-    inf_aver.columns = adata_ref.uns['mod']['factor_names']
+    inf_aver.columns = annotated_ref_seq.uns['mod']['factor_names']
 
     # find shared genes and subset both anndata and reference signatures
     intersect = np.intersect1d(annotated_data.var_names, inf_aver.index)
     annotated_data = annotated_data[:, intersect].copy()
     inf_aver = inf_aver.loc[intersect, :].copy()
 
-    if run_c2l_training:
+    if run_c2l_training_:
         print("Running Cell2Location with determined Cell Signature")
-        mod = run_cell2location(annotated_data, inf_aver, save_path=RESULTS_DIR_C2L,
-                                n_training=n_training)
+        mod = run_cell2location(annotated_data, inf_aver, save_path=RESULTS_DIR_C2L, n_training_=n_training_)
     else:
         mod = cell2location.models.RegressionModel.load(str(RESULTS_DIR_C2L), annotated_data)
 
-    # In this section, we export the estimated cell abundance (summary of the posterior distribution).
+    # export the estimated cell abundance (summary of the posterior distribution).
     for sample in annotated_data.obs["sample"].unique():
         adata_sample = annotated_data[annotated_data.obs['sample'].isin([sample]), :].copy()
 
@@ -418,7 +390,8 @@ def cell2location_xenium(extract_signature: bool = True,
             adata_sample, sample_kwargs={'num_samples': 500, 'batch_size': len(adata_sample.obs), 'use_gpu': True},
         )
 
-        adata_sample.obs["c2l_label"] = [cat.split("_")[-1] for cat in adata_sample.obsm["means_cell_abundance_w_sf"].idxmax(axis=1).tolist()]
+        adata_sample.obs["c2l_label"] = [cat.split("_")[-1] for cat in
+                                         adata_sample.obsm["means_cell_abundance_w_sf"].idxmax(axis=1).tolist()]
         visualize(adata_sample, "c2l_label", savefig_path=RESULTS_DIR_C2L / f"{sample}_cluster_visualization.png")
 
         # Save anndata object with results
@@ -432,17 +405,53 @@ def cell2location_xenium(extract_signature: bool = True,
     return 0
 
 
-if "__main__" == __name__:
+def build_results_dir(label_, n_neighbors_, n_comp_, subset_):
+
+    subset_key = {True: "_subset", False: ""}
+    # Declare Global Path
+    global RESULTS_DIR
+    RESULTS_DIR = Path(f"../../scratch/lbrunsch/results/cell2location{subset_key[subset_]}")
+
+    if label_ == "leiden":
+        RESULTS_DIR = RESULTS_DIR / f"leiden_neigh{n_neighbors_}_pca{n_comp_}"
+    else:
+        RESULTS_DIR = RESULTS_DIR / label_
+
+    global RESULTS_DIR_SIGNATURE
+    RESULTS_DIR_SIGNATURE = RESULTS_DIR / "adata_ref"
+    global RESULTS_DIR_C2L
+    RESULTS_DIR_C2L = RESULTS_DIR / "cell2location"
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
+    os.makedirs(RESULTS_DIR_C2L, exist_ok=True)
+    os.makedirs(RESULTS_DIR_SIGNATURE, exist_ok=True)
 
+    return RESULTS_DIR
+
+
+if "__main__" == __name__:
+    # Run different steps
     run_qc_plots = False
     extract_signature_cell = True
     run_cell2location_training = True
+
+    # Training
     n_training = 30000
+
+    # Select Labels
     label_key = "leiden"
 
+    # Specific to Leiden Clustering
+    n_comp = 50
+    n_neighbors = 13
+    subset = False
+
+    # Build directory results
+    main_dir = build_results_dir(label_key, n_neighbors, n_comp, subset)
+
+    logging.basicConfig(
+        filename=str(main_dir / 'log_python.txt'), level=logging.INFO)
+
     # Perform C2L on xenium data
-    cell2location_xenium(extract_signature_cell, run_cell2location_training, run_qc_plots,
-                         label_key=label_key,
-                         n_training=n_training)
+    cell2location_xenium(extract_signature_cell, run_cell2location_training, run_qc_plots, n_training_=n_training,
+                         label_key_=label_key, n_comp_=n_comp, n_neighbors_=n_neighbors, subset_=subset)
