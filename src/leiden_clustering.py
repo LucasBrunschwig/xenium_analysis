@@ -42,7 +42,7 @@ def compute_ref_labels(adata, n_comp: int = 50, n_neighbors: int = 13):
     sc.tl.umap(adata_)
     sc.tl.leiden(adata_)
 
-    return adata.obs["leiden"].values.tolist()
+    return adata_.obs["leiden"].values.tolist()
 
 
 def main():

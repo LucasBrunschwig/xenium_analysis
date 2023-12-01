@@ -4,6 +4,7 @@ from pathlib import Path
 
 # Third party
 import matplotlib.pyplot as plt
+import scanpy
 from matplotlib.ticker import FuncFormatter
 import matplotlib as mpl
 import seaborn as sns
@@ -43,11 +44,15 @@ def load_replicates(paths: list):
     return adata_list
 
 
-def qc_metrics(adata):
-    r""" This function calculates QC metrics
+def qc_metrics(adata: scanpy.AnnData, save_path: Path = RESULTS_DIR):
+    """ This function calculates QC metrics, plot results and save figures.
 
-    :param adata: AnnData object
+    This function expect the obs dataframe to have a column "sample" affecting each data point to a sample.
+
+    :param adata: AnnData object containing transcriptomics data
+    :param save_path: expect a path to save figures
     """
+
     adata_vis = adata.copy()
 
     for sample in adata.obs["sample"].unique():
@@ -108,11 +113,23 @@ def qc_metrics(adata):
             wspace=0.4,
         )
 
-        plt.savefig(RESULTS_DIR / f"spatial_observation_{sample}.png")
+        plt.savefig(save_path / f"spatial_observation_{sample}.png")
         plt.close()
 
 
-def plot_umap_samples(adata_vis):
+def plot_umap_samples(adata_vis: scanpy.AnnData, save_path: Path = RESULTS_DIR):
+    """
+    Compute umap and plot/save a superposition of replicates for visual comparison:
+    - The obs dataframe of adata_vis should contain a column called "sample" containing sample label.
+    - This function expect raw transcriptomics data.
+
+    Parameters
+    ----------
+    :param adata_vis: AnnData containing transcriptomics replicates
+    :param save_path: expect a path to save figures
+
+
+    """
     adata_vis_plt = adata_vis.copy()
 
     # log(p + 1)
@@ -126,23 +143,23 @@ def plot_umap_samples(adata_vis):
     sc.pp.neighbors(adata_vis_plt, n_neighbors=20, n_pcs=40, metric='cosine')
     sc.tl.umap(adata_vis_plt, min_dist=0.3, spread=1)
 
-    # Plot
+    # Plot and save figure
     with mpl.rc_context({'figure.figsize': [8, 8],
                          'axes.facecolor': 'white'}):
         sc.pl.umap(adata_vis_plt, color=['sample'], size=2,
                    color_map='RdPu', ncols=1,
                    legend_fontsize=10)
-    plt.savefig(RESULTS_DIR / "umap_samples.png")
-    plt.close()
+        plt.savefig(save_path / "umap_samples.png")
+        plt.close()
 
 
-def plot_umap_ref(adata, cell_taxonomy: list):
+def plot_umap_ref(adata: scanpy.AnnData, cell_taxonomy: list):
     """
 
     Parameters
     ----------
-    adata
-    cell_taxonomy
+    :param adata:
+    :param cell_taxonomy:
 
     Returns
     -------
@@ -279,16 +296,16 @@ def run_cell2location(adata_vis, inf_aver, save_path: Path, n_training_: int):
     return mod
 
 
-def cell2location_xenium(run_qc_plots_: bool = True, run_extract_signature_: bool = True,
-                         run_c2l_training_: bool = True, n_training_: int = 10000,
-                         label_key_: str = "ClusterName", n_comp_: int = 50,
-                         n_neighbors_: int = 13, subset_: bool = False):
+def run_cell2location_xenium(run_qc_plots_: bool = True, run_extract_signature_: bool = True,
+                             run_c2l_training_: bool = True, n_training_: int = 10000,
+                             label_key_: str = "ClusterName", n_comp_: int = 50,
+                             n_neighbors_: int = 13, subset_: bool = False):
     # Path to data
     data_path = Path("../../scratch/lbrunsch/data")
     path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
     path_replicate_2 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_2"
     path_replicate_3 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_3"
-    paths = [path_replicate_1, path_replicate_2, path_replicate_3]
+    paths = [path_replicate_1]  # path_replicate_2, path_replicate_3]
     path_ref = data_path / "Brain_Atlas_RNA_seq/l5_all.loom"
 
     # Load Xenium mouse brain replicates
@@ -328,8 +345,9 @@ def cell2location_xenium(run_qc_plots_: bool = True, run_extract_signature_: boo
     annotated_ref_seq = annotated_ref_seq[:, ~annotated_ref_seq.var['mt'].values]
 
     # filter genes
-    selected = filter_gene_index(annotated_ref_seq)
-    annotated_ref_seq = annotated_ref_seq[:, selected].copy()
+    if not subset_:
+        selected = filter_gene_index(annotated_ref_seq)
+        annotated_ref_seq = annotated_ref_seq[:, selected].copy()
 
     if label_key_ == "leiden":
         annotated_ref_seq_copy = annotated_ref_seq.copy()
@@ -406,16 +424,15 @@ def cell2location_xenium(run_qc_plots_: bool = True, run_extract_signature_: boo
 
 
 def build_results_dir(label_, n_neighbors_, n_comp_, subset_):
-
     subset_key = {True: "_subset", False: ""}
     # Declare Global Path
     global RESULTS_DIR
     RESULTS_DIR = Path(f"../../scratch/lbrunsch/results/cell2location{subset_key[subset_]}")
 
     if label_ == "leiden":
-        RESULTS_DIR = RESULTS_DIR / f"leiden_neigh{n_neighbors_}_pca{n_comp_}"
+        RESULTS_DIR = RESULTS_DIR / f"_leiden_neigh{n_neighbors_}_pca{n_comp_}"
     else:
-        RESULTS_DIR = RESULTS_DIR / label_
+        RESULTS_DIR = RESULTS_DIR / f"_{label_}"
 
     global RESULTS_DIR_SIGNATURE
     RESULTS_DIR_SIGNATURE = RESULTS_DIR / "adata_ref"
@@ -453,5 +470,5 @@ if "__main__" == __name__:
         filename=str(main_dir / 'log_python.txt'), level=logging.INFO)
 
     # Perform C2L on xenium data
-    cell2location_xenium(extract_signature_cell, run_cell2location_training, run_qc_plots, n_training_=n_training,
-                         label_key_=label_key, n_comp_=n_comp, n_neighbors_=n_neighbors, subset_=subset)
+    run_cell2location_xenium(run_qc_plots, extract_signature_cell, run_cell2location_training, n_training_=n_training,
+                             label_key_=label_key, n_comp_=n_comp, n_neighbors_=n_neighbors, subset_=subset)
