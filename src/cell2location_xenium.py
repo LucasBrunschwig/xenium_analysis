@@ -4,6 +4,7 @@ from pathlib import Path
 
 # Third party
 import matplotlib.pyplot as plt
+import pandas as pd
 import scanpy
 from matplotlib.ticker import FuncFormatter
 import matplotlib as mpl
@@ -25,7 +26,6 @@ from visualization import visualize
 RESULTS_DIR = Path()
 RESULTS_DIR_SIGNATURE = Path()
 RESULTS_DIR_C2L = Path()
-
 
 def load_replicates(paths: list):
     adata_list = []
@@ -307,6 +307,7 @@ def run_cell2location_xenium(run_qc_plots_: bool = True, run_extract_signature_:
     path_replicate_3 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_3"
     paths = [path_replicate_1]  # path_replicate_2, path_replicate_3]
     path_ref = data_path / "Brain_Atlas_RNA_seq/l5_all.loom"
+    path_ref_agg = data_path / "Brain_Atlas_RNA_seq/l5_all.agg.loom"
 
     # Load Xenium mouse brain replicates
     slides = load_replicates(paths)
@@ -318,12 +319,13 @@ def run_cell2location_xenium(run_qc_plots_: bool = True, run_extract_signature_:
                                            index_unique=None,
                                            )
 
-    # Load scRNA-seq
-    annotated_ref_seq = load_rna_seq_data(path_ref)
+    if label_key_ != "AtlasAggregate":
+        # Load scRNA-seq
+        annotated_ref_seq = load_rna_seq_data(path_ref)
 
-    if subset_:
-        intersect = np.intersect1d(annotated_data.var_names, annotated_ref_seq.var_names)
-        annotated_ref_seq = annotated_ref_seq[:, intersect]
+        if subset_:
+            intersect = np.intersect1d(annotated_data.var_names, annotated_ref_seq.var_names)
+            annotated_ref_seq = annotated_ref_seq[:, intersect]
 
     # Examine QC metrics of Xenium data
     if run_qc_plots_:
@@ -334,60 +336,70 @@ def run_cell2location_xenium(run_qc_plots_: bool = True, run_extract_signature_:
         print("UMAP for replicates")
         plot_umap_samples(annotated_data)
 
-        if label_key_ != "leiden":
+        if label_key_ not in ["leiden", "AtlasAggregate"]:
             print(len(annotated_ref_seq.obs[label_key_].unique()), annotated_ref_seq.obs[label_key_].unique())
             plot_umap_ref(annotated_ref_seq, cell_taxonomy=[label_key_])
 
     # mitochondria-encoded (MT) genes should be removed for spatial mapping
     annotated_data.obsm['mt'] = annotated_data[:, annotated_data.var['mt'].values].X.toarray()
     annotated_data = annotated_data[:, ~annotated_data.var['mt'].values]
-    annotated_ref_seq.obsm['mt'] = annotated_ref_seq[:, annotated_ref_seq.var['mt'].values].X.toarray()
-    annotated_ref_seq = annotated_ref_seq[:, ~annotated_ref_seq.var['mt'].values]
 
-    # filter genes
-    if not subset_:
-        selected = filter_gene_index(annotated_ref_seq)
-        annotated_ref_seq = annotated_ref_seq[:, selected].copy()
+    if label_key_ != "AtlasAggregate":
 
-    if label_key_ == "leiden":
-        annotated_ref_seq_copy = annotated_ref_seq.copy()
-        annotated_ref_seq_copy = preprocess_transcriptomics(annotated_ref_seq_copy, filter_=False)
-        annotated_ref_seq.obs["leiden"] = compute_ref_labels(annotated_ref_seq_copy, n_neighbors_, n_comp_)
+        annotated_ref_seq.obsm['mt'] = annotated_ref_seq[:, annotated_ref_seq.var['mt'].values].X.toarray()
+        annotated_ref_seq = annotated_ref_seq[:, ~annotated_ref_seq.var['mt'].values]
 
-        print(len(annotated_ref_seq.obs[label_key_].unique()), annotated_ref_seq.obs[label_key_].unique())
-        plot_umap_ref(annotated_ref_seq, cell_taxonomy=[label_key_])
+        # filter genes
+        if not subset_:
+            selected = filter_gene_index(annotated_ref_seq)
+            annotated_ref_seq = annotated_ref_seq[:, selected].copy()
 
-    if run_extract_signature_:
+        if label_key_ == "leiden":
+            annotated_ref_seq_copy = annotated_ref_seq.copy()
+            annotated_ref_seq_copy = preprocess_transcriptomics(annotated_ref_seq_copy, filter_=False)
+            annotated_ref_seq.obs["leiden"] = compute_ref_labels(annotated_ref_seq_copy, n_neighbors_, n_comp_)
+
+            print(len(annotated_ref_seq.obs[label_key_].unique()), annotated_ref_seq.obs[label_key_].unique())
+            plot_umap_ref(annotated_ref_seq, cell_taxonomy=[label_key_])
+
+    if run_extract_signature_ and label_key_ != "AtlasAggregate":
         print("Running Cell Signature Extraction")
         mod = signature_ref(annotated_ref_seq, label=label_key_, save_path=RESULTS_DIR_SIGNATURE)
+    elif label_key_ == "AtlasAggregate":
+        annotated_ref_agg = sc.read_loom(path_ref_agg)
+        inf_aver = pd.DataFrame(annotated_ref_agg.X.toarray().T)
+        inf_aver.columns = annotated_ref_agg.obs["ClusterName"]
+        inf_aver.index = annotated_ref_agg.var["Accession"]
     else:
         mod = cell2location.models.RegressionModel.load(str(RESULTS_DIR_SIGNATURE), annotated_ref_seq)
 
-    # export the estimated cell abundance (summary of the posterior distribution).
-    annotated_ref_seq = mod.export_posterior(
-        annotated_ref_seq,
-        sample_kwargs={'num_samples': 1000, 'batch_size': 2500, 'use_gpu': True},
-    )
 
-    # Save anndata object with results
-    adata_file = f"{RESULTS_DIR_SIGNATURE}/sc.h5ad"
-    annotated_ref_seq.write(adata_file)
+    if label_key_ != "AtlasAggregate":
+        # export the estimated cell abundance (summary of the posterior distribution).
+        annotated_ref_seq = mod.export_posterior(
+            annotated_ref_seq,
+            sample_kwargs={'num_samples': 1000, 'batch_size': 2500, 'use_gpu': True},
+        )
 
-    # Check issue with inference and noisy diagonal -> because corrected batch effect
-    mod.plot_QC()
-    plt.savefig(RESULTS_DIR_SIGNATURE / "QC_adata_ref.png")
-    plt.close()
+        # Save anndata object with results
+        adata_file = f"{RESULTS_DIR_SIGNATURE}/sc.h5ad"
+        annotated_ref_seq.write(adata_file)
 
-    # Format signature expression for each cluster
-    if 'means_per_cluster_mu_fg' in annotated_ref_seq.varm.keys():
-        inf_aver = annotated_ref_seq.varm['means_per_cluster_mu_fg'][[f'means_per_cluster_mu_fg_{i}'
-                                                                      for i in annotated_ref_seq.uns['mod'][
-                                                                          'factor_names']]].copy()
-    else:
-        inf_aver = annotated_ref_seq.var[[f'means_per_cluster_mu_fg_{i}'
-                                          for i in annotated_ref_seq.uns['mod']['factor_names']]].copy()
+        # Check issue with inference and noisy diagonal -> because corrected batch effect
+        mod.plot_QC()
+        plt.savefig(RESULTS_DIR_SIGNATURE / "QC_adata_ref.png")
+        plt.close()
 
-    inf_aver.columns = annotated_ref_seq.uns['mod']['factor_names']
+        # Format signature expression for each cluster
+        if 'means_per_cluster_mu_fg' in annotated_ref_seq.varm.keys():
+            inf_aver = annotated_ref_seq.varm['means_per_cluster_mu_fg'][[f'means_per_cluster_mu_fg_{i}'
+                                                                          for i in annotated_ref_seq.uns['mod'][
+                                                                              'factor_names']]].copy()
+        else:
+            inf_aver = annotated_ref_seq.var[[f'means_per_cluster_mu_fg_{i}'
+                                              for i in annotated_ref_seq.uns['mod']['factor_names']]].copy()
+
+        inf_aver.columns = annotated_ref_seq.uns['mod']['factor_names']
 
     # find shared genes and subset both anndata and reference signatures
     intersect = np.intersect1d(annotated_data.var_names, inf_aver.index)
@@ -455,13 +467,13 @@ if "__main__" == __name__:
     # Training
     n_training = 30000
 
-    # Select Labels
-    label_key = "leiden"
+    # Select Labels ("leiden", "ClusterName", "AtlasAggregate)
+    label_key = "AtlasAggregate"
 
     # Specific to Leiden Clustering
     n_comp = 50
     n_neighbors = 13
-    subset = True
+    subset = False
 
     # Build directory results
     main_dir = build_results_dir(label_key, n_neighbors, n_comp, subset)
