@@ -467,7 +467,7 @@ if "__main__" == __name__:
     run_cell2location_training = True
 
     # Training
-    n_training = 1000
+    n_training = 100
 
     # Select Labels ("leiden", "ClusterName", "AtlasAggregate)
     label_key = "ClusterName"
