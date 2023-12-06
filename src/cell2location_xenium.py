@@ -441,12 +441,14 @@ def build_results_dir(label_, n_neighbors_, n_comp_, subset_):
     subset_key = {True: "_subset", False: ""}
     # Declare Global Path
     global RESULTS_DIR
-    RESULTS_DIR = Path(f"../../scratch/lbrunsch/results/cell2location{subset_key[subset_]}")
+    RESULTS_DIR = f"../../scratch/lbrunsch/results/cell2location{subset_key[subset_]}"
 
     if label_ == "leiden":
-        RESULTS_DIR = RESULTS_DIR / f"_leiden_neigh{n_neighbors_}_pca{n_comp_}"
+        RESULTS_DIR = RESULTS_DIR + f"_leiden_neigh{n_neighbors_}_pca{n_comp_}"
     else:
-        RESULTS_DIR = RESULTS_DIR / f"_{label_}"
+        RESULTS_DIR = RESULTS_DIR + f"_{label_}"
+
+    RESULTS_DIR = Path(RESULTS_DIR)
 
     global RESULTS_DIR_SIGNATURE
     RESULTS_DIR_SIGNATURE = RESULTS_DIR / "adata_ref"
