@@ -27,6 +27,7 @@ RESULTS_DIR = Path()
 RESULTS_DIR_SIGNATURE = Path()
 RESULTS_DIR_C2L = Path()
 
+
 def load_replicates(paths: list):
     adata_list = []
     for path in paths:
@@ -373,7 +374,6 @@ def run_cell2location_xenium(run_qc_plots_: bool = True, run_extract_signature_:
     else:
         mod = cell2location.models.RegressionModel.load(str(RESULTS_DIR_SIGNATURE), annotated_ref_seq)
 
-
     if label_key_ != "AtlasAggregate":
         # export the estimated cell abundance (summary of the posterior distribution).
         annotated_ref_seq = mod.export_posterior(
@@ -413,12 +413,18 @@ def run_cell2location_xenium(run_qc_plots_: bool = True, run_extract_signature_:
         mod = cell2location.models.RegressionModel.load(str(RESULTS_DIR_C2L), annotated_data)
 
     # export the estimated cell abundance (summary of the posterior distribution).
+    # for sample in annotated_data.obs["sample"].unique():
+    #     adata_sample = annotated_data[annotated_data.obs['sample'].isin([sample]), :].copy()
+
+    annotated_data = mod.export_posterior(
+        annotated_data, sample_kwargs={'num_samples': 500, 'batch_size': len(annotated_data), 'use_gpu': True},
+    )
+    mod.plot_QC()
+    plt.savefig(RESULTS_DIR_C2L / f"QC_spatial_mapping.png")
+    plt.close()
+
     for sample in annotated_data.obs["sample"].unique():
         adata_sample = annotated_data[annotated_data.obs['sample'].isin([sample]), :].copy()
-
-        adata_sample = mod.export_posterior(
-            adata_sample, sample_kwargs={'num_samples': 500, 'batch_size': len(adata_sample.obs), 'use_gpu': True},
-        )
 
         adata_sample.obs["c2l_label"] = [cat.split("_")[-1] for cat in
                                          adata_sample.obsm["means_cell_abundance_w_sf"].idxmax(axis=1).tolist()]
@@ -427,10 +433,6 @@ def run_cell2location_xenium(run_qc_plots_: bool = True, run_extract_signature_:
         # Save anndata object with results
         adata_file = f"{RESULTS_DIR_C2L}/sp_{sample}.h5ad"
         adata_sample.write(adata_file)
-
-        mod.plot_QC()
-        plt.savefig(RESULTS_DIR_C2L / f"QC_spatial_mapping_{sample}.png")
-        plt.close()
 
     return 0
 
@@ -465,10 +467,10 @@ if "__main__" == __name__:
     run_cell2location_training = True
 
     # Training
-    n_training = 30000
+    n_training = 1000
 
     # Select Labels ("leiden", "ClusterName", "AtlasAggregate)
-    label_key = "AtlasAggregate"
+    label_key = "ClusterName"
 
     # Specific to Leiden Clustering
     n_comp = 50
