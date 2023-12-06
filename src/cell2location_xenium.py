@@ -235,7 +235,7 @@ def signature_ref(annotated_ref_seq, label: str, save_path: Path):
     mod.view_anndata_setup()
 
     # train the probabilistic model
-    mod.train(max_epochs=5000, use_gpu=True)
+    mod.train(max_epochs=50, use_gpu=True)
 
     # Plot History and save figure
     mod.plot_history(10)
