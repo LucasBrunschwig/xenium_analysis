@@ -34,6 +34,8 @@ def fetch_gene_details(gene_id):
 
 def extract_map_locus(gene_names: list, organism: str):
     map_loci = []
+    map_start = []
+    map_end = []
     ids = []
     for gene_name in gene_names:
         ids.append(search_gene(gene_name, organism))
@@ -41,8 +43,13 @@ def extract_map_locus(gene_names: list, organism: str):
     for detail in details:
         map_locus = detail['Entrezgene_gene']['Gene-ref']['Gene-ref_maploc']
         map_loci.append(map_locus)
+        # Base pair According to GRCh38.p14
+        map_bp_from = detail["Entrezgene_locus"][0]["Gene-commentary_seqs"][0]['Seq-loc_int']['Seq-interval']['Seq-interval_from']
+        map_bp_to = detail["Entrezgene_locus"][0]["Gene-commentary_seqs"][0]['Seq-loc_int']['Seq-interval']['Seq-interval_to']
+        map_start.append(map_bp_from)
+        map_end.append(map_bp_to)
 
-    return map_loci
+    return map_loci, map_start, map_end
 
 
 def extract_gene_names_from_panels(path: Path, col: str):
@@ -89,7 +96,6 @@ def visualize_chromosome(map_loci):
         else:
             chrom_ = 'chr' + re.search(".*(?=p|q)", locus).group()
             locus_ = re.search("(p|q).*", locus).group()
-
             map_loci_formatted[chrom_].append(locus_)
 
     ideo = pd.read_table(
@@ -134,14 +140,50 @@ def visualize_chromosome(map_loci):
         if chrom == "chr22":
             break
 
-
     ax.set_xlim(0, max_chromosome_length+5e6)
     ax.set_ylim(0, height_up + 0.5)
 
     plt.savefig(RESULTS / "Chromosome_Human.png", bbox_inches="tight", dpi=300)
 
 
-def main(file_path: Path, organism: str):
+def build_df_from_locus(map_loci, map_start, map_end, gene_names, organism):
+
+    # Split information into chromosomes and band locations
+    chrom_list = []
+    band_list = []
+    arm_list = []
+    for locus in map_loci:
+        if organism == "Homo sapiens":
+            if '-' in locus:
+                locus_1, band_2 = locus.split('-')
+                chrom_ = re.search(".*(?=p|q)", locus_1).group()
+                band_1 = re.search("(p|q).*", locus_1).group()
+
+                chrom_list.append(chrom_)
+                band_list.append([band_1, band_2])
+            else:
+                chrom_ = re.search(".*(?=p|q)", locus).group()
+                band_ = re.search("(p|q).*", locus).group()
+                chrom_list.append(chrom_)
+                band_list.append(band_)
+
+            if 'p' in locus:
+                arm_list.append('p')
+            else:
+                arm_list.append('q')
+        elif organism == "Mus musculus":
+            arm_list.append('q')
+            chrom_list.append(locus.split(" ")[0])
+            band_list = [""]
+
+    df = pd.DataFrame(data={'chrom': chrom_list, 'band': band_list,
+                            'arm_list': arm_list, 'seq_start': map_start,
+                            'seq_end': map_end, 'raw': map_loci},
+                      index=gene_names)
+    return df
+
+
+def main(file_path: Path, organism: str, plot: bool = True):
 
     if organism == "Homo sapiens":
         col = "Genes"
@@ -160,29 +202,57 @@ def main(file_path: Path, organism: str):
 
     gene_names = extract_gene_names_from_panels(path=file_path, col=col)
 
-    map_loci = extract_map_locus(gene_names, organism)
+    map_loci, map_start, map_end = extract_map_locus(gene_names, organism)
 
-    distribution = np.zeros((len(rows), len(column)))
+    if plot:
+        distribution = np.zeros((len(rows), len(column)))
 
-    for locus in map_loci:
-        if 'p' in locus:
-            ch = mapping[str(locus.split('p')[0])]
-            arm = 0
-        elif 'q' in locus:
-            ch = mapping[str(locus.split('q')[0])]
-            arm = 1
-        else:
-            ch = mapping[str(locus.split(' ')[0])]
-            arm = 0
+        for locus in map_loci:
+            if 'p' in locus:
+                ch = mapping[str(locus.split('p')[0])]
+                arm = 0
+            elif 'q' in locus:
+                ch = mapping[str(locus.split('q')[0])]
+                arm = 1
+            else:
+                ch = mapping[str(locus.split(' ')[0])]
+                arm = 0
 
-        distribution[ch, arm] += 1
+            distribution[ch, arm] += 1
 
-    distribution = pd.DataFrame(data=distribution, index=rows, columns=column)
+        distribution = pd.DataFrame(data=distribution, index=rows, columns=column)
 
-    plot_distribution_loci(distribution, save_path=RESULTS / f"{organism}.png")
+        plot_distribution_loci(distribution, save_path=RESULTS / f"{organism}.png")
 
-    if organism == "Homo sapiens":
-        visualize_chromosome(map_loci)
+        if organism == "Homo sapiens":
+            visualize_chromosome(map_loci)
+
+    df = build_df_from_locus(map_loci, map_start, map_end, gene_names, organism)
+
+    return df
+
+
+def get_gene_location(path: Path, organism: str) -> pd.DataFrame:
+    """ This function returns a dataframe containing the chromosome/arm/locus location of each gene
+
+    Parameters
+    ----------
+    path: the path to the set of gene panels from Xenium
+    organism: 'Homo sapiens' or 'Mus musculus'
+
+    Returns
+    -------
+    pandas Dataframe containing (chrom, arm, band, seq_start, seq_end, raw)
+
+    """
+    save_path = Path(str(path)[:-4] + "_map_loci.csv")
+    if not os.path.isfile(save_path):
+        df = main(file_path=path, organism=organism, plot=False)
+        df.to_csv(save_path)
+    else:
+        df = pd.read_csv(save_path)
+
+    return df
 
 
 if __name__ == "__main__":
@@ -191,12 +261,12 @@ if __name__ == "__main__":
     human_brain_path = Path(r"C:\Users\Lucas\Desktop\PhD\code\scratch\lbrunsch\data\Gene_Panels"
                             r"\Xenium_hBrain_v1_metadata.csv")
     organism = "Homo sapiens"
-    main(human_brain_path, organism)
+    main(human_brain_path, organism, plot=False)
 
     # Mouse Gene Panels
     mouse_brain_path = Path(r"C:\Users\Lucas\Desktop\PhD\code\scratch\lbrunsch\data\Gene_Panels"
                             r"\Xenium_V1_FF_Mouse_Brain_MultiSection_Input_gene_groups.csv")
     organism = "Mus musculus"
-    main(mouse_brain_path, organism)
+    main(mouse_brain_path, organism, plot=False)
 
 

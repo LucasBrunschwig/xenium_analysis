@@ -2,124 +2,196 @@
 import os
 from pathlib import Path
 import shutil
+import zipfile
+import re
 
+import anndata
 # third party
 import scanpy as sc
 import pandas as pd
 import gzip
 import squidpy as sq
 import numpy as np
+import tifffile
 
 
-def decompress(path_file):
+def decompress(path_file, extension='gz'):
     if not os.path.isfile(f'{path_file}'):
-        with gzip.open(f'{path_file}.gz', 'rb') as f_in:
-            with open(f'{path_file}', 'wb') as f_out:
-                shutil.copyfileobj(f_in, f_out)
+        if extension == 'gz':
+            with gzip.open(f'{path_file}.gz', 'rb') as f_in:
+                with open(f'{path_file}', 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+        elif extension == 'zip':
+            with zipfile.ZipFile(f'{path_file}.zip', 'r') as f_in:
+                with open(f'{path_file}', 'w') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
 
 
-def format_xenium_adata(path: Path, tag: str, output_path: str):
-    """ Largely Inspired by https://github.com/Moldia/Xenium_benchmarking/blob/main/xb/formatting.py
+def format_xenium_adata(path: Path, output_path: Path,
+                      segmentation_info: bool = True,
+                      cluster_info: bool = True):
+    """
 
     Parameters
     ----------
     path (Path): Path to the folder containing Xenium output
-    tag (str): ?
     output_path (str): output_path where to save the formatted adata file
+    segmentation_info (bool): loads the nuclear and cellular boundaries
+    cluster_info (bool): loads the predefined clustering (graph, kmeans (1-10))
 
     Returns
     -------
     adata object
 
     """
+    if not os.path.isfile(Path(str(output_path) + '.h5ad')):
+        # decompress various files
+        decompress(path / 'transcripts.csv')
+        decompress(path / 'cell_boundaries.csv')
+        decompress(path / 'nucleus_boundaries.csv')
 
-    # decompress various files
-    decompress(path / 'transcripts.csv')
-    decompress(path / 'cell_feature_matrix' / 'barcodes.tsv')
-    decompress(path / 'cell_feature_matrix' / 'features.tsv')
-    decompress(path / 'cell_feature_matrix' / 'matrix.mtx')
-    decompress(path / 'cells.csv')
+        # read data that contains cell feature matrix and some additional information
+        adata = sc.read_10x_h5(path / "cell_feature_matrix.h5")
 
-    a = mmread(path / 'cell_feature_matrix' / 'matrix.mtx')
-    ad = a.todense()
+        cell = pd.read_csv(path / "cells.csv")
 
-    cell_info = pd.read_csv(path / "cells.csv")
-    features = pd.read_csv(path / 'cell_feature_matrix' / 'features.tsv', sep='\t', header=None, index_col=0)
-    barcodes = pd.read_csv(path / 'cell_feature_matrix' / 'barcodes.tsv', header=None, index_col=0)
-    adata = sc.AnnData(ad.transpose(), obs=cell_info, var=features)
-    adata.var.index.name = 'index'
-    adata.var.columns = ['gene_id', 'reason_of_inclusion']
-    panel_info = pd.read_csv(path / 'panel.tsv', sep='\t')
+        # Integrate cells.csv in adata object
+        cell.set_index(adata.obs_names, inplace=True)
+        adata.obs = cell
+        adata.obs["og_index"] = adata.obs.index
+        adata.obs_names_make_unique()
 
-    try:
-        panel_info['Gene']
-    except Exception as e:
-        panel_info['Gene'] = panel_info['Name']
+        # Format Spatial information for plotting
+        adata.obsm["spatial"] = adata.obs[["x_centroid", "y_centroid"]].copy().to_numpy()
 
-    dict_annotation = dict(zip(panel_info['Gene'], panel_info['Annotation']))
-    dict_ENSEMBL = dict(zip(panel_info['Gene'], panel_info['Ensembl ID']))
-    adata.var['Annotation'] = adata.var.index.map(dict_annotation)
-    adata.var['Ensembl ID'] = adata.var.index.map(dict_ENSEMBL)
-    adata.var['in_panel'] = adata.var.index.isin(panel_info['Gene'])
-    transcripts = pd.read_csv(path / 'transcripts.csv', index_col=0)
-    adata.uns['spots'] = transcripts
-    try:
-        UMAP = pd.read_csv(path + '/analysis/umap/gene_expression_2_components/projection.csv', index_col=0)
-        adata.obsm['X_umap'] = np.array(UMAP)
-        TSNE = pd.read_csv(path + '/analysis/tsne/gene_expression_2_components/projection.csv', index_col=0)
-        adata.obsm['X_tsne'] = np.array(TSNE)
-        PCA = pd.read_csv(path + '/analysis/PCA/gene_expression_10_components/projection.csv', index_col=0)
-        adata.obsm['X_pca'] = np.array(PCA)
-        clusters = pd.read_csv(path + '/analysis/clustering/gene_expression_graphclust/clusters.csv', index_col=0)
-        adata.obs['graph_clusters'] = list(clusters['Cluster'].astype(str))
-        kmeans2 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
-        adata.obs['kmeans2_clusters'] = list(kmeans2['Cluster'].astype(str))
-        kmeans3 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
-        adata.obs['kmeans3_clusters'] = list(kmeans3['Cluster'].astype(str))
-        kmeans4 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
-        adata.obs['kmeans4_clusters'] = list(kmeans4['Cluster'].astype(str))
-        kmeans5 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
-        adata.obs['kmeans5_clusters'] = list(kmeans5['Cluster'].astype(str))
-        kmeans6 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
-        adata.obs['kmeans6_clusters'] = list(kmeans6['Cluster'].astype(str))
-        kmeans7 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
-        adata.obs['kmeans7_clusters'] = list(kmeans7['Cluster'].astype(str))
-        kmeans8 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
-        adata.obs['kmeans8_clusters'] = list(kmeans8['Cluster'].astype(str))
-        kmeans9 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv', index_col=0)
-        adata.obs['kmeans9_clusters'] = list(kmeans9['Cluster'].astype(str))
-        kmeans10 = pd.read_csv(path + '/analysis/clustering/gene_expression_kmeans_2_clusters/clusters.csv',
-                               index_col=0)
-        adata.obs['kmeans10_clusters'] = list(kmeans10['Cluster'].astype(str))
-    except:
-        print('UMAP and clusters_could not be recovered')
-    adata.write(output_path + tag + '.h5ad')
+        # Ensure unique index for gene by focusing on gene_ids
+        adata.var["SYMBOL"] = adata.var.index
+        adata.var.set_index("gene_ids", drop=True, inplace=True)
+
+        # Specific information about transcript
+        transcripts = pd.read_csv(path / 'transcripts.csv', index_col=0)
+        transcripts = transcripts[~transcripts["feature_name"].str.contain("BLANK") |
+                                  ~transcripts["feature_name"].str.contains("NegControl")]
+
+        adata.uns['spots'] = transcripts
+
+        # Retrieve UMAP, TSNE, PCA information
+        additional_cat = ["X_umap", "X_tsne", "X_pca"]
+        additional_paths = ['/analysis/umap/gene_expression_2_components/projection.csv',
+                            '/analysis/tsne/gene_expression_2_components/projection.csv',
+                            '/analysis/pca/gene_expression_10_components/projection.csv']
+        for cat, sub_path in zip(additional_cat, additional_paths):
+            try:
+                X = pd.read_csv(Path(str(path) + sub_path))
+                adata.obsm[cat] = np.array(X)
+            except Exception as e:
+                print(f"Failed retrieving: {additional_cat}")
+
+        if segmentation_info:
+            nuclear_boundaries = pd.read_csv(path / "nucleus_boundaries.csv")
+            adata.uns['nucleus_boundaries'] = nuclear_boundaries
+            cell_boundaries = pd.read_csv(path / "cell_boundaries.csv")
+            adata.uns['cell_boundaries'] = cell_boundaries
+
+        if cluster_info:
+            # Retrieve Clustering and differential expression values
+            additional_cat = (['graph_clusters'] +
+                              [f'kmeans{k}_clusters' for k in range(2, 11)])
+            additional_paths = (['/gene_expression_graphclust/'] +
+                                [f'/gene_expression_kmeans_{k}_clusters/' for k in range(2, 11)])
+            for main_folder, filename in zip(['clustering', 'diffexp'], ['clusters.csv', 'differential_expression.csv']):
+                for cat, sub_path in zip(additional_cat, additional_paths):
+                    try:
+                        path_ = Path(str(path) + f'/analysis/' + main_folder + sub_path + filename)
+                        X = pd.read_csv(path_, index_col=0)
+                        if main_folder == "clustering":
+                            adata.obs[cat] = list(X["Cluster"].astype(str))
+                        elif main_folder == "diffexp":
+                            if cat == 'graph_clusters':
+                                k_mean_n = adata.obs[cat].to_numpy().astype(int).max()
+                            else:
+                                k_mean_n = int(re.search("\d+", sub_path).group())
+                            for j in range(1, k_mean_n + 1):
+                                adata.var[cat + f"_cluster{j}_log2_fold"] = X[f"Cluster {j} Log2 fold change"].tolist()
+                                adata.var[cat + f"_cluster{j}_ajusted_pvalue"] = X[f"Cluster {j} Adjusted p value"].tolist()
+                    except Exception as e:
+                        print(f"Error: {e}")
+
+        # Save h5ad file to specified location
+        adata.write(Path(str(output_path) + '.h5ad'))
+    else:
+        adata = anndata.read_h5ad(Path(str(output_path) + '.h5ad'))
+
     return adata
 
 
-def load_xenium_data(path):
-    # Load h5 file for transcriptomics matrix data
-    adata = sc.read_10x_h5(os.path.join(path, "cell_feature_matrix.h5"))
+def load_xenium_images(path: Path, type: str = None):
+    """
 
-    # Load Observation for each spots
-    with gzip.open(os.path.join(path, "cells.csv.gz"), "rt") as file:
-        df = pd.read_csv(file)
+    Parameters
+    ----------
+    path
+    type
 
-    # Combine both information
-    df.set_index(adata.obs_names, inplace=True)
-    adata.obs = df
-    adata.obs["og_index"] = adata.obs.index
-    adata.obs_names_make_unique()
+    Returns
+    -------
 
-    # Format Spatial information for plotting
-    adata.obsm["spatial"] = adata.obs[["x_centroid", "y_centroid"]].copy().to_numpy()
+    """
+    results = []
+    if type is None or type == "morphology":
+        results.append(tifffile.imread(str(path / 'morphology.ome.tif')))
+    if type is None or type == "focus":
+        results.append(tifffile.imread(str(path / 'morphology_focus.ome.tif')))
+    if type is None or type == "mip":
+        results.append(tifffile.imread(str(path / 'morphology_mip.ome.tif')))
+    return results
 
-    # Ensure unique index for gene
-    adata.var["SYMBOL"] = adata.var.index
-    adata.var.set_index("gene_ids", drop=True, inplace=True)
 
-    # Mark the 'mt' gene
-    adata.var['mt'] = [gene.startswith('mt-') for gene in adata.var['SYMBOL']]
+def load_xenium_data(path: Path, formatted: bool = True):
+    """
+
+    Parameters
+    ----------
+    path: if formatted expect a .h5ad, else the main sample folder
+    formatted: if loading the formatted dataset
+
+    Returns
+    -------
+
+    """
+
+    if formatted and str(path).endswith(".h5ad"):
+        adata = anndata.read_h5ad(path)
+    elif not formatted:
+        adata = format_xenium_adata(path, output_path=path)
+    else:
+        print("Formatted Expect a '.h5ad' file path")
+
+    # ##############################################################
+    # Deprecated
+    # # Load h5 file for transcriptomics matrix data
+    # adata = sc.read_10x_h5(os.path.join(path, "cell_feature_matrix.h5"))
+    #
+    # # Load Observation for each spots
+    # with gzip.open(os.path.join(path, "cells.csv.gz"), "rt") as file:
+    #     df = pd.read_csv(file)
+    #
+    # # Combine both information
+    # df.set_index(adata.obs_names, inplace=True)
+    # adata.obs = df
+    # adata.obs["og_index"] = adata.obs.index
+    # adata.obs_names_make_unique()
+    #
+    # # Format Spatial information for plotting
+    # adata.obsm["spatial"] = adata.obs[["x_centroid", "y_centroid"]].copy().to_numpy()
+    #
+    # # Ensure unique index for gene
+    # adata.var["SYMBOL"] = adata.var.index
+    # adata.var.set_index("gene_ids", drop=True, inplace=True)
+    #
+    # # Mark the 'mt' gene
+    # adata.var['mt'] = [gene.startswith('mt-') for gene in adata.var['SYMBOL']]
+    # ##############################################################
 
     return adata
 
@@ -174,3 +246,11 @@ def plot_xenium_labels(adata, label_key):
 
 def get_name_from_path(path: Path) -> str:
     return str(path).split(os.sep)[-1]
+
+
+if __name__ == "__main__":
+    data_path = Path("../../scratch/lbrunsch/data")
+    path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
+    path_output_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1_Formatted"
+    format_xenium_adata(path=path_replicate_1, output_path=data_path / 'Xenium_FF_MB_1')
+    load_xenium_images(path=path_replicate_1)
