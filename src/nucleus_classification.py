@@ -2,6 +2,7 @@
 from pathlib import Path
 import os
 
+import anndata
 # Third party
 from shapely.geometry import Point, Polygon
 import numpy as np
@@ -33,6 +34,7 @@ def assign_transcript_to_nucleus(adata, filename: str, tmp_path: Path = Path("..
 
     os.makedirs(tmp_path, exist_ok=True)
 
+    # Check if already processed
     if not os.path.isfile(tmp_path / "nucleus_polygons.pkl"):
         cell_polygons = []
         for cell_id in adata.uns["nucleus_boundaries"]["cell_id"].unique():
@@ -45,35 +47,39 @@ def assign_transcript_to_nucleus(adata, filename: str, tmp_path: Path = Path("..
         with open(tmp_path / "nucleus_polygons.pkl", 'rb') as file:
             cell_polygons = pickle.load(file)
 
-    coord = adata.uns["spots"][["x_location", "y_location", "z_location"]]
-    coord = coord.iloc[0:5]
-    cell_id = {}
-    with tqdm(total=len(cell_polygons), desc="Processing") as pbar:
-        for i, polygon in enumerate(cell_polygons):
-            pbar.update(1)
-            minx, miny, maxx, maxy = polygon.bounds
-            coord_subset = coord[(
-                        (coord["x_location"] > minx) & (coord["x_location"] < maxx) & (coord["y_location"] > miny) & (
-                            coord["y_location"] < maxy))]
-            for j, row in coord_subset.iterrows():
-                point = Point((row['x_location'], row['y_location']))
-                if point.within(polygon):
-                    if not cell_id.get(j, None):
-                        cell_id[j] = []
-                    cell_id[j].append(i)  # associate a transcript j to polygon i
+    # Check if already processed
+    if not os.path.isfile(RESULTS / filename):
+        coord = adata.uns["spots"][["x_location", "y_location", "z_location"]]
+        coord = coord.iloc[0:5]
+        cell_id = {}
+        with tqdm(total=len(cell_polygons), desc="Processing") as pbar:
+            for i, polygon in enumerate(cell_polygons):
+                pbar.update(1)
+                minx, miny, maxx, maxy = polygon.bounds
+                coord_subset = coord[(
+                            (coord["x_location"] > minx) & (coord["x_location"] < maxx) & (coord["y_location"] > miny) & (
+                                coord["y_location"] < maxy))]
+                for j, row in coord_subset.iterrows():
+                    point = Point((row['x_location'], row['y_location']))
+                    if point.within(polygon):
+                        if not cell_id.get(j, None):
+                            cell_id[j] = []
+                        cell_id[j].append(i)  # associate a transcript j to polygon i
 
-    cell_assignment = []
-    for j in coord.index:
-        if cell_id.get(j, None):
-            cell_assignment.append(cell_id[j])
-        else:
-            cell_assignment.append([])
+        cell_assignment = []
+        for j in coord.index:
+            if cell_id.get(j, None):
+                cell_assignment.append(cell_id[j])
+            else:
+                cell_assignment.append([])
 
-    coord["cell_id"] = cell_assignment
-    coord["cell_id"] = coord["cell_id"].apply(lambda x: x[0] if len(x) > 0 else None)  # assume one cell id per trscrpt
-    adata.uns["spots"]["cell_id"] = coord["cell_id"]
+        coord["cell_id"] = cell_assignment
+        coord["cell_id"] = coord["cell_id"].apply(lambda x: int(x[0]) if len(x) > 0 else None)  # assume one cell id per trscrpt
+        adata.uns["spots"]["cell_id"] = coord["cell_id"]
 
-    adata.write_h5ad(RESULTS / filename)
+        adata.write_h5ad(RESULTS / filename)
+    else:
+        adata = anndata.read_h5ad(RESULTS / filename)
 
     return adata
 
@@ -103,36 +109,41 @@ def main(path_replicates_: list, panel_path_: Path, filename_: str):
     # Currently work as a cylinder
     annotated_data = assign_transcript_to_nucleus(adata=annotated_data, filename=filename_)
 
+    # Assign transcripts type to genome location
     transcripts_assignments = annotated_data.uns["spots"]
+    transcripts_assignments["feature_name"] = transcripts_assignments["feature_name"].str.upper()  # case sensitive
+    map_loci.index = map_loci.index.str.upper()  # case sensitive
     transcripts_assignments["locus"] = (transcripts_assignments["feature_name"].apply(
-        lambda p: map_loci.loc[map_loci.index.str.contains(p, case=False)]["chrom_arm"]))
+        lambda p: map_loci.loc[p]["chrom_arm"]))
 
     # Visualize each cell transcripts distribution in 3D
-    for cell_id in transcripts_assignments["cell_id"].unique():
-        cell_transcripts = transcripts_assignments[transcripts_assignments["cell_id"] == int(cell_id)]
+    for cell_id in transcripts_assignments["cell_id"].unique()[0:100]:
+        if not np.isnan(cell_id):
+            cell_transcripts = transcripts_assignments[transcripts_assignments["cell_id"] == cell_id]
+            cell_id = int(cell_id)
 
-        c_map_transcripts = cell_transcripts["feature_name"]
-        c_map_transcripts_colored = [label_to_color(label) for label in c_map_transcripts]
-        c_map_chrom = cell_transcripts["locus"]
-        c_map_chrom_colored = [label_to_color(label) for label in c_map_chrom]
+            c_map_transcripts = cell_transcripts["feature_name"].tolist()
+            c_map_transcripts_colored = [label_to_color(label) for label in c_map_transcripts]
+            c_map_chrom = cell_transcripts["locus"]
+            c_map_chrom_colored = [label_to_color(label) for label in c_map_chrom]
 
-        x = np.array(cell_transcripts["x_location"])
-        y = np.array(cell_transcripts["y_location"])
-        z = np.array(cell_transcripts["z_location"])
+            x = np.array(cell_transcripts["x_location"])
+            y = np.array(cell_transcripts["y_location"])
+            z = np.array(cell_transcripts["z_location"])
 
-        # one plot colored by transcript group
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(x, y, z, s=10, c=c_map_transcripts_colored, marker='o', label=c_map_transcripts)
-        ax.legend()
-        fig.savefig(RESULTS / f"id_{cell_id}_transcripts_colored")
+            # one plot colored by transcript group
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(x, y, z, s=10, c=c_map_transcripts_colored, marker='o', label=c_map_transcripts)
+            ax.legend()
+            fig.savefig(RESULTS / f"id_{cell_id}_transcripts_colored.png")
 
-        # one plot colored by chromosome group
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(x, y, z, s=10, c=c_map_chrom_colored, marker='o', label=c_map_chrom)
-        ax.legend()
-        fig.savefig(RESULTS / f"id_{cell_id}_locus_colored")
+            # one plot colored by chromosome group
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(x, y, z, s=10, c=c_map_chrom_colored, marker='o', label=c_map_chrom)
+            ax.legend()
+            fig.savefig(RESULTS / f"id_{cell_id}_locus_colored.png")
 
     return 0
 
@@ -157,5 +168,3 @@ if __name__ == "__main__":
     create_results_dir()
 
     main(path_replicates, mouse_brain_path, filename)
-
-    print("test")
