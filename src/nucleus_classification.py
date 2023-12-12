@@ -104,8 +104,8 @@ def main(path_replicates_: list, panel_path_: Path, filename_: str):
     annotated_data = assign_transcript_to_nucleus(adata=annotated_data, filename=filename_)
 
     transcripts_assignments = annotated_data.uns["spots"]
-    transcripts_assignments["locus"] = (transcripts_assignments["feature_name"].
-                                        apply(lambda p: map_loci.loc[p]["chrom_arm"]))
+    transcripts_assignments["locus"] = (transcripts_assignments["feature_name"].apply(
+        lambda p: map_loci.loc[map_loci.index.str.contains(p, case=False)]["chrom_arm"]))
 
     # Visualize each cell transcripts distribution in 3D
     for cell_id in transcripts_assignments["cell_id"].unique():
