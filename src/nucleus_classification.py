@@ -96,6 +96,7 @@ def main(path_replicates_: list, panel_path_: Path, filename_: str):
 
     # Load Annotated Data
     annotated_data = load_xenium_data(path_replicates_[0], formatted=False)
+    print(annotated_data.uns["spots"]["feature_name"].value_counts())
 
     # Select one cell and look at what it is containing
     # Issue to solve how to take into account the depth when the cell boundaries is in 2-D (z-axis)
@@ -105,7 +106,7 @@ def main(path_replicates_: list, panel_path_: Path, filename_: str):
 
     transcripts_assignments = annotated_data.uns["spots"]
     transcripts_assignments["locus"] = (transcripts_assignments["feature_name"].
-                                        apply(lambda p: map_loci.loc[p]["chrom_arm"]))
+                                        apply(lambda p: map_loci.loc[p]["chrom"]))
 
     # Visualize each cell transcripts distribution in 3D
     for cell_id in transcripts_assignments["cell_id"].unique():
