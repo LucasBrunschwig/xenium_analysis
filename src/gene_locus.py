@@ -176,10 +176,12 @@ def build_df_from_locus(map_loci, map_start, map_end, gene_names, organism):
             chrom_list.append(locus.split(" ")[0])
             band_list = [""]
 
-    df = pd.DataFrame(data={'chrom': chrom_list, 'band': band_list,
-                            'arm_list': arm_list, 'seq_start': map_start,
+    df = pd.DataFrame(data={'chrom': chrom_list, 'arm': arm_list,
+                            'band': band_list, 'seq_start': map_start,
                             'seq_end': map_end, 'raw': map_loci},
                       index=gene_names)
+    df["chrom_arm"] = df.apply(lambda p: p["chrom"] + p["arm"], axis=1)
+
     return df
 
 
@@ -250,7 +252,7 @@ def get_gene_location(path: Path, organism: str) -> pd.DataFrame:
         df = main(file_path=path, organism=organism, plot=False)
         df.to_csv(save_path)
     else:
-        df = pd.read_csv(save_path)
+        df = pd.read_csv(save_path, index_col=0)
 
     return df
 

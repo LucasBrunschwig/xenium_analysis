@@ -70,7 +70,7 @@ def format_xenium_adata(path: Path, output_path: Path,
 
         # Specific information about transcript
         transcripts = pd.read_csv(path / 'transcripts.csv', index_col=0)
-        transcripts = transcripts[~transcripts["feature_name"].str.contain("BLANK") |
+        transcripts = transcripts[~transcripts["feature_name"].str.contains("BLANK") |
                                   ~transcripts["feature_name"].str.contains("NegControl")]
 
         adata.uns['spots'] = transcripts

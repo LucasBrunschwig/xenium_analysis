@@ -23,7 +23,7 @@ def nucleus_segmentation():
     raise NotImplementedError()
 
 
-def assign_transcript_to_nucleus(adata, tmp_path: Path = Path("../tmp")):
+def assign_transcript_to_nucleus(adata, filename: str, tmp_path: Path = Path("../tmp")):
     """ This functions takes the transcripts information and assign it to a nucleus or None
 
     Returns: adata, the adata modified with each transcript assigned to a nucleus or None
@@ -46,13 +46,7 @@ def assign_transcript_to_nucleus(adata, tmp_path: Path = Path("../tmp")):
             cell_polygons = pickle.load(file)
 
     coord = adata.uns["spots"][["x_location", "y_location", "z_location"]]
-    coord = coord.iloc[0:2000].copy()
-    # Improve this:
-    #   we know that Transcripts are ordered sequentially along x-axis
-    #   we can look at polygon and check if they are ordered by location
-
-    # one idea would be to iterate through polygons first and
-    # then through transcripts by finding the x-index with a certain precision and start from there
+    coord = coord.iloc[0:5]
     cell_id = {}
     with tqdm(total=len(cell_polygons), desc="Processing") as pbar:
         for i, polygon in enumerate(cell_polygons):
@@ -79,6 +73,8 @@ def assign_transcript_to_nucleus(adata, tmp_path: Path = Path("../tmp")):
     coord["cell_id"] = coord["cell_id"].apply(lambda x: x[0] if len(x) > 0 else None)  # assume one cell id per trscrpt
     adata.uns["spots"]["cell_id"] = coord["cell_id"]
 
+    adata.write_h5ad(RESULTS / filename)
+
     return adata
 
 
@@ -93,12 +89,10 @@ def visualize_plot():
     raise NotImplementedError()
 
 
-def main(path_replicates_: list, panel_path_: Path):
+def main(path_replicates_: list, panel_path_: Path, filename_: str):
 
     # Load Gene Panel Location
     map_loci = get_gene_location(panel_path_, organism='Mus musculus')
-    map_loci.rename(columns={map_loci.columns[0]: "gene"}, inplace=True)
-    map_loci["chrom_arm"] = map_loci.apply(lambda p: p["chrom"] + p["arm"], axis=1)
 
     # Load Annotated Data
     annotated_data = load_xenium_data(path_replicates_[0], formatted=False)
@@ -107,7 +101,7 @@ def main(path_replicates_: list, panel_path_: Path):
     # Issue to solve how to take into account the depth when the cell boundaries is in 2-D (z-axis)
     # Work of the ML students will be extremely helpful here
     # Currently work as a cylinder
-    annotated_data = assign_transcript_to_nucleus(adata=annotated_data)
+    annotated_data = assign_transcript_to_nucleus(adata=annotated_data, filename=filename_)
 
     transcripts_assignments = annotated_data.uns["spots"]
     transcripts_assignments["locus"] = (transcripts_assignments["feature_name"].
@@ -155,13 +149,13 @@ if __name__ == "__main__":
     data_path = Path("../../scratch/lbrunsch/data")
     path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
     path_replicates = [path_replicate_1]
-
+    filename = "Xenium_V1_FF_Mouse_Brain_MultiSection_1_assigned_transcripts.h5ad"
     # Human Gene Panels
     mouse_brain_path = Path(r"C:\Users\Lucas\Desktop\PhD\code\scratch\lbrunsch\data\Gene_Panels"
                             r"\Xenium_V1_FF_Mouse_Brain_MultiSection_Input_gene_groups.csv")
 
     create_results_dir()
 
-    main(path_replicates, mouse_brain_path)
+    main(path_replicates, mouse_brain_path, filename)
 
     print("test")
