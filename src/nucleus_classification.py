@@ -50,7 +50,6 @@ def assign_transcript_to_nucleus(adata, filename: str, tmp_path: Path = Path("..
     # Check if already processed
     if not os.path.isfile(RESULTS / filename):
         coord = adata.uns["spots"][["x_location", "y_location", "z_location"]]
-        coord = coord.iloc[0:5]
         cell_id = {}
         with tqdm(total=len(cell_polygons), desc="Processing") as pbar:
             for i, polygon in enumerate(cell_polygons):
