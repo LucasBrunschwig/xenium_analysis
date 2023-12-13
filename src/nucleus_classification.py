@@ -162,7 +162,7 @@ if __name__ == "__main__":
     path_replicates = [path_replicate_1]
     filename = "Xenium_V1_FF_Mouse_Brain_MultiSection_1_assigned_transcripts.h5ad"
     # Human Gene Panels
-    mouse_brain_path = Path(r"C:\Users\Lucas\Desktop\PhD\code\scratch\lbrunsch\data\Gene_Panels"
+    mouse_brain_path = Path(r"..\..\scratch\lbrunsch\data\Gene_Panels"
                             r"\Xenium_V1_FF_Mouse_Brain_MultiSection_Input_gene_groups.csv")
 
     create_results_dir()
