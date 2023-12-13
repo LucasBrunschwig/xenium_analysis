@@ -266,8 +266,8 @@ if __name__ == "__main__":
     main(human_brain_path, organism, plot=False)
 
     # Mouse Gene Panels
-    mouse_brain_path = Path(r"..\..\scratch\lbrunsch\data\Gene_Panels"
-                            r"\Xenium_V1_FF_Mouse_Brain_MultiSection_Input_gene_groups.csv")
+    mouse_brain_path = Path(r"../../scratch/lbrunsch/data/Gene_Panels"
+                            r"/Xenium_V1_FF_Mouse_Brain_MultiSection_Input_gene_groups.csv")
     organism = "Mus musculus"
     main(mouse_brain_path, organism, plot=False)
 
