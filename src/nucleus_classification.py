@@ -31,11 +31,15 @@ def assign_transcript_to_nucleus_cellpose(adata: anndata.AnnData, save_path: str
     if str(save_path).endswith("h5ad") and os.path.isfile(save_path):
         return anndata.read_h5ad(save_path)
 
+    print("Segmenting...")
+
     # Step 1: Load Image
     img = load_image(img_path, img_type="stack", level_=0)
 
     # Step 2: Run Segmentation on image to extract masks
     nuclei_segmentation = segment_cellpose(img, model_type=model_type, do_3d=True)
+
+    print("Assignments...")
 
     # Step 3:
     adata = transcripts_assignments(nuclei_segmentation, adata, save_path)
@@ -112,15 +116,19 @@ def visualize_plot():
 
 
 def main(path_replicates_: list, panel_path_: Path, segmentation_method: str):
+
     # Load Gene Panel Location
+    print("Computing Genome Location")
     map_loci = get_gene_location(panel_path_, organism='Mus musculus')
 
     # Load Annotated Data
+    print("Loading Xenium Replicate")
     annotated_data = load_xenium_data(path_replicates_[0], formatted=False)
 
     # Select one cell and look at what it is containing
     # Work of the ML students will be extremely helpful here
     # Currently work as a cylinder
+    print("Assigning Transcripts and Segmentation")
     if segmentation_method == "xenium":
         annotated_data = assign_transcript_to_nucleus_xenium(adata=annotated_data,
                                                              save_path=str(path_replicates_[0]) +
@@ -132,6 +140,7 @@ def main(path_replicates_: list, panel_path_: Path, segmentation_method: str):
                                                                img_path=path_replicates_[0],
                                                                model_type="cyto")
 
+    print("Plotting Results")
     # Assign transcripts type to genome location
     transcripts_assignments_ = annotated_data.uns["spots"]
     transcripts_assignments_["feature_name"] = transcripts_assignments_["feature_name"].str.upper()  # case sensitive

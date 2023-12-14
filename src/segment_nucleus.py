@@ -227,6 +227,8 @@ def run_cellpose_3d(path_replicate_: Path, level: int = 0):
     plt.tight_layout()
     fig.savefig(RESULTS_3D / "3d_patch_og.png", dpi=600)
 
+    print("Segmenting the whole image")
+
     if not os.path.isfile(RESULTS_3D / "mask_outline.pkl"):
         seg_3d = segment_cellpose(img, do_3d=True)
         with open(RESULTS_3D / "mask.pkl", "wb") as file:
@@ -237,6 +239,8 @@ def run_cellpose_3d(path_replicate_: Path, level: int = 0):
     else:
         with open(RESULTS_3D / "mask_outline.pkl", "rb") as file:
             seg_3d_outlines = pickle.load(file)
+
+    print("Plotting Resulting Segmentation")
 
     seg_3d_outlines = seg_3d_outlines[boundaries[1][0]:boundaries[1][1],
                                       boundaries[2][0]:boundaries[2][1]]
