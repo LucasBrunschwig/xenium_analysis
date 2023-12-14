@@ -1,3 +1,4 @@
+import json
 import os
 import re
 
@@ -11,34 +12,44 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
 # Provide your email here
-Entrez.email = "lucas.brunschwig@hotmail.fr"
+Entrez.email = "lucas.brunschwig@epfl.ch"
 
 
 RESULTS = Path("../../scratch/lbrunsch/results/xenium_panels")
 os.makedirs(RESULTS, exist_ok=True)
 
 
-def search_gene(gene_name, organism="Homo sapiens"):
-    search_query = f"{gene_name}[Gene Name] AND {organism}[Organism]"
-    handle = Entrez.esearch(db="gene", term=search_query, retmax=1)
+def search_gene(gene_id, gene_name, organism_="Homo sapiens"):
+    search_query = f"{gene_id}"
+    handle = Entrez.esearch(db="gene", term=search_query)
     record = Entrez.read(handle)
+    if len(record["IdList"]) == 0:  # if ensemble ID fails try with alternative query
+        search_query = f"{gene_name}[Gene Name] AND {organism_}[Organism]"
+        handle = Entrez.esearch(db="gene", term=search_query)
+        record = Entrez.read(handle)
     return record["IdList"][0]
 
 
 def fetch_gene_details(gene_id):
-    time.sleep(1)
     handle = Entrez.efetch(db="gene", id=gene_id, retmode="xml")
     records = Entrez.read(handle)
     return records
 
 
-def extract_map_locus(gene_names: list, organism: str):
+def extract_map_locus(gene_ids: list, gene_names: list, organism_: str):
     map_loci = []
     map_start = []
     map_end = []
     ids = []
-    for gene_name in gene_names:
-        ids.append(search_gene(gene_name, organism))
+    for gene_id, gene_name in zip(gene_ids, gene_names):
+        count = 1
+        while count < 3:
+            try:
+                ids.append(search_gene(gene_id, gene_name, organism_))
+                break
+            except Exception as e:
+                print(f"Error {gene_id} - {gene_name}: {e}")
+                count += 1
     details = fetch_gene_details(ids)
     for detail in details:
         map_locus = detail['Entrezgene_gene']['Gene-ref']['Gene-ref_maploc']
@@ -53,8 +64,17 @@ def extract_map_locus(gene_names: list, organism: str):
 
 
 def extract_gene_names_from_panels(path: Path, col: str):
-    panels_df = pd.read_csv(path)
-    return panels_df[col].tolist()
+    df = pd.read_csv(path)
+    gene_names = df[col].tolist()
+
+    with open(str(path)[:-4]+".json", 'r') as json_file:
+        data = json.load(json_file)
+    gene_list = []
+    for gene in data["payload"]["targets"]:
+        if gene["type"]["descriptor"] == "gene":
+            gene_list.append(gene["type"]["data"]["id"])
+
+    return gene_list, gene_names
 
 
 def plot_distribution_loci(distribution, save_path: Path):
@@ -202,9 +222,9 @@ def main(file_path: Path, organism: str, plot: bool = True):
     else:
         raise ValueError("Undetermined organism")
 
-    gene_names = extract_gene_names_from_panels(path=file_path, col=col)
+    gene_ids, gene_names = extract_gene_names_from_panels(path=file_path, col=col)
 
-    map_loci, map_start, map_end = extract_map_locus(gene_names, organism)
+    map_loci, map_start, map_end = extract_map_locus(gene_ids, gene_names, organism)
 
     if plot:
         distribution = np.zeros((len(rows), len(column)))
