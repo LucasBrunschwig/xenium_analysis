@@ -49,7 +49,7 @@ def segment_cellpose(
     # - diameter (default: 30), flow threshold (0.4)
     # - batch size (224x224 patches to run simultaneously
     # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
-    masks, flows, styles, diameters = model.eval(x=img, channels=[0, 0], net_avg=net_avg, diameter=20)
+    masks, flows, styles, diameters = model.eval(x=img, channels=[0, 0], net_avg=net_avg, diameter=25)
 
     return masks
 
@@ -74,11 +74,13 @@ def image_patch(img_array, square_size: int = 400, format_: str = "test"):
                 img_array.shape[1]//2-square_size//2:img_array.shape[1]//2+square_size//2],
                 ([img_array.shape[0]//2-square_size//2, img_array.shape[0]//2+square_size//2],
                 [img_array.shape[1]//2-square_size//2, img_array.shape[1]//2+square_size//2])]
+    elif format_ == "whole-image":
+        return [img_array, [[0, img_array.shape[0]], [0, img_array.shape[1]]]]
     else:
         raise NotImplementedError(f" {format_} not implemented yet")
 
 
-def load_image(path_replicate: Path, img_type: str):
+def load_image(path_replicate: Path, img_type: str, level_: int = 0):
     if img_type == "mip":
         img_file = str(path_replicate / "morphology_mip.ome.tif")
     elif img_type == "focus":
@@ -118,9 +120,9 @@ def run_cellpose_2d(path_replicate: Path, img_type: str = "mip"):
     x_conversion = 0.2125
     y_conversion = 0.2125
     adata.uns["nucleus_boundaries"]["vertex_y_pixel"] = adata.uns["nucleus_boundaries"]["vertex_y"].apply(
-        lambda p: round(p/y_conversion) - boundaries[0][0])
+        lambda p: round(p/y_conversion))
     adata.uns["nucleus_boundaries"]["vertex_x_pixel"] = adata.uns["nucleus_boundaries"]["vertex_x"].apply(
-        lambda p: round(p/x_conversion) - boundaries[1][0])
+        lambda p: round(p/x_conversion))
 
     # Selection of segmented nucleus that are inside the patch
     pix_boundaries = adata.uns["nucleus_boundaries"][(adata.uns["nucleus_boundaries"]["vertex_x_pixel"] > boundaries[1][0]) &
@@ -143,7 +145,7 @@ def run_cellpose_2d(path_replicate: Path, img_type: str = "mip"):
     seg_patch_comb_outlines = outlines_list(seg_patch_comb, multiprocessing=False)
 
     plt.imshow(patch)
-    plt.savefig(RESULTS / f"og_patch_{img_type}.png")
+    plt.savefig(RESULTS / f"og_patch_{img_type}.png", dpi=500)
     plt.close()
 
     # Plot the results and compare it to the original images
@@ -161,34 +163,38 @@ def run_cellpose_2d(path_replicate: Path, img_type: str = "mip"):
     ax[1, 2].set_title("CellPose - Cyto2")
 
     # Plot Xenium original boundaries
+    [ax[2, i].set_title("Xeinum Segmentation") for i in [0, 1, 2]]
     for cell_seg in pix_boundaries["cell_id"].unique():
-        x = pix_boundaries[pix_boundaries["cell_id"] == cell_seg]["vertex_x_pixel"].to_numpy()
-        y = pix_boundaries[pix_boundaries["cell_id"] == cell_seg]["vertex_y_pixel"].to_numpy()
+        x = pix_boundaries[pix_boundaries["cell_id"] == cell_seg]["vertex_x_pixel"].to_numpy() - boundaries[1][0]
+        y = pix_boundaries[pix_boundaries["cell_id"] == cell_seg]["vertex_y_pixel"].to_numpy() - boundaries[0][0]
         ax[2, 0].plot(x, y, c='r', linewidth=.5)
         ax[2, 1].plot(x, y, c='r', linewidth=.5)
         ax[2, 2].plot(x, y, c='r', linewidth=.5)
 
     plt.tight_layout()
-    fig.savefig(RESULTS / f"cellpose_{img_type}_segmentation.png", bbox_inches="tight")
+    fig.savefig(RESULTS / f"cellpose_{img_type}_segmentation.png", bbox_inches="tight", dpi=500)
 
     fig, ax = plt.subplots(1, 3)
     [x_.axis("off") for x_ in ax]
     [x_.imshow(patch) for x_ in ax]
-    [ax[0].plot(mask[:, 0], mask[:, 1], 'g', linewidth=.5) for mask in seg_patch_comb_outlines]
-    [ax[2].plot(mask[:, 0], mask[:, 1], 'g', linewidth=.5) for mask in seg_patch_comb_outlines]
-
+    ax[0].set_title("CellPose - Average")
+    ax[1].set_title("Xenium Segmentation")
+    ax[2].set_title("Segmentation Superposition")
     for cell_seg in pix_boundaries["cell_id"].unique():
-        x = pix_boundaries[pix_boundaries["cell_id"] == cell_seg]["vertex_x_pixel"].to_numpy()
-        y = pix_boundaries[pix_boundaries["cell_id"] == cell_seg]["vertex_y_pixel"].to_numpy()
+        x = pix_boundaries[pix_boundaries["cell_id"] == cell_seg]["vertex_x_pixel"].to_numpy() - boundaries[1][0]
+        y = pix_boundaries[pix_boundaries["cell_id"] == cell_seg]["vertex_y_pixel"].to_numpy() - boundaries[0][0]
         ax[1].plot(x, y, c='r', linewidth=.5)
         ax[2].plot(x, y, c='r', linewidth=.5)
+    [ax[0].plot(mask[:, 0], mask[:, 1], 'aqua', linewidth=.5, alpha=0.5) for mask in seg_patch_comb_outlines]
+    [ax[2].plot(mask[:, 0], mask[:, 1], 'aqua', linewidth=.5, alpha=0.5) for mask in seg_patch_comb_outlines]
     plt.tight_layout()
-    fig.savefig(RESULTS / f"superposition_xenium_cellpose_{img_type}.png")
+    fig.savefig(RESULTS / f"superposition_xenium_cellpose_{img_type}.png", dpi=500)
 
     return 0
 
 
 def run_cellpose_3d(path_replicate_: Path, level: int = 0):
+    load_image(path_replicate_1, img_type="stack", level_=level)
     pass
 
 
@@ -209,7 +215,7 @@ if __name__ == "__main__":
 
     if run == "2d":
         print("Running 2D Segmentation Algorithm on Nuclei")
-        img_type = "focus"
+        img_type = "mip"
         run_cellpose_2d(path_replicate_1, img_type)
     elif run == "3d":
         level = 0
