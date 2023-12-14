@@ -1,5 +1,6 @@
 # Std
 import os
+import pickle
 from pathlib import Path
 
 # Third party
@@ -212,8 +213,9 @@ def run_cellpose_2d(path_replicate: Path, img_type: str = "mip"):
 
 
 def run_cellpose_3d(path_replicate_: Path, level: int = 0):
+
     img = load_image(path_replicate_, img_type="stack", level_=level)
-    patch, boundaries = image_patch(img, square_size=400)
+    patch, boundaries = image_patch(img, square_size=700)
 
     fig, axs = plt.subplots(3, 4)
 
@@ -225,8 +227,19 @@ def run_cellpose_3d(path_replicate_: Path, level: int = 0):
     plt.tight_layout()
     fig.savefig(RESULTS_3D / "3d_patch_og.png", dpi=600)
 
-    seg_3d = segment_cellpose(patch, do_3d=True)
-    seg_3d_outlines = outlines_list(seg_3d)
+    if not os.path.isfile(RESULTS_3D / "mask_outline.pkl"):
+        seg_3d = segment_cellpose(img, do_3d=True)
+        with open(RESULTS_3D / "mask.pkl", "wb") as file:
+            pickle.dump(seg_3d, file)
+        seg_3d_outlines = outlines_list(seg_3d)
+        with open(RESULTS_3D / "mask_outline.pkl", "wb") as file:
+            pickle.dump(seg_3d, file)
+    else:
+        with open(RESULTS_3D / "mask_outline.pkl", "rb") as file:
+            seg_3d_outlines = pickle.load(file)
+
+    seg_3d_outlines = seg_3d_outlines[boundaries[1][0]:boundaries[1][1],
+                                      boundaries[2][0]:boundaries[2][1]]
 
     fig, axs = plt.subplots(3, 4)
 
