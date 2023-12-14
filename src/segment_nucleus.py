@@ -233,7 +233,7 @@ def run_cellpose_3d(path_replicate_: Path, level: int = 0):
             pickle.dump(seg_3d, file)
         seg_3d_outlines = outlines_list(seg_3d)
         with open(RESULTS_3D / "mask_outline.pkl", "wb") as file:
-            pickle.dump(seg_3d, file)
+            pickle.dump(seg_3d_outlines, file)
     else:
         with open(RESULTS_3D / "mask_outline.pkl", "rb") as file:
             seg_3d_outlines = pickle.load(file)
