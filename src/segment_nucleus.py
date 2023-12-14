@@ -13,12 +13,14 @@ import numpy as np
 from utils import load_xenium_data
 
 RESULTS = Path()
+RESULTS_3D = Path()
 
 
 def segment_cellpose(
         img: np.ndarray,
         model_type: str = "nuclei",
         net_avg: bool = False,
+        do_3d: bool = False,
 ) -> np.ndarray:
     """Run cellpose and get masks
 
@@ -26,7 +28,8 @@ def segment_cellpose(
     ----------
     img: Can be list of 2D/3D images, or array of 2D/3D images, or 4D image array
     model_type: model type to load
-    net_avg: runs 1 model or 4 built-in models
+    net_avg: evaluate 1 model or average of 4 built-in models
+    do_3d: perform 3D nuclear segmentation requires 3D array
 
     Returns
     -------
@@ -49,7 +52,7 @@ def segment_cellpose(
     # - diameter (default: 30), flow threshold (0.4)
     # - batch size (224x224 patches to run simultaneously
     # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
-    masks, flows, styles, diameters = model.eval(x=img, channels=[0, 0], net_avg=net_avg, diameter=25)
+    masks, flows, styles, diameters = model.eval(x=img, channels=[0, 0], net_avg=net_avg, diameter=None, do_3D=do_3d)
 
     return masks
 
@@ -69,11 +72,23 @@ def image_patch(img_array, square_size: int = 400, format_: str = "test"):
     returns: list of patches or one patch as np.ndarray
     """
 
+    if len(img_array.shape) == 2:
+        coord_1, coord_2 = 0, 1
+    else:
+        coord_1, coord_2 = 1, 2
+
+    l_t = img_array.shape[coord_1] // 2 - square_size // 2
+    r_t = img_array.shape[coord_1] // 2 + square_size // 2
+    l_b = img_array.shape[coord_2] // 2 - square_size // 2
+    r_b = img_array.shape[coord_2] // 2 + square_size // 2
+
     if format_ == "test":
-        return [img_array[img_array.shape[0]//2-square_size//2:img_array.shape[0]//2+square_size//2,
-                img_array.shape[1]//2-square_size//2:img_array.shape[1]//2+square_size//2],
-                ([img_array.shape[0]//2-square_size//2, img_array.shape[0]//2+square_size//2],
-                [img_array.shape[1]//2-square_size//2, img_array.shape[1]//2+square_size//2])]
+        if len(img_array.shape) == 2:
+            return [img_array[l_t:r_t,l_b:r_b],
+                    ([l_t, r_t], [l_b, r_b])]
+        else:
+            return [img_array[:, l_t:r_t, l_b:r_b],
+                    ([0, l_t, r_t], [img_array.shape[0], l_b, r_b])]
     elif format_ == "whole-image":
         return [img_array, [[0, img_array.shape[0]], [0, img_array.shape[1]]]]
     else:
@@ -87,6 +102,9 @@ def load_image(path_replicate: Path, img_type: str, level_: int = 0):
         img_file = str(path_replicate / "morphology_focus.ome.tif")
     elif img_type == "stack":
         img_file = str(path_replicate / "morphology.ome.tif")
+        with tifffile.TiffFile(img_file) as tif:
+            image = tif.series[0].levels[level_].asarray()
+        return image
     else:
         raise ValueError("Not a type of image")
 
@@ -194,19 +212,99 @@ def run_cellpose_2d(path_replicate: Path, img_type: str = "mip"):
 
 
 def run_cellpose_3d(path_replicate_: Path, level: int = 0):
-    load_image(path_replicate_1, img_type="stack", level_=level)
-    pass
+    img = load_image(path_replicate_, img_type="stack", level_=level)
+    patch, boundaries = image_patch(img, square_size=400)
+
+    fig, axs = plt.subplots(3, 4)
+
+    for i, (layer, ax) in enumerate(zip(patch, axs.ravel())):
+        ax.axis("off")
+        ax.set_title(f"patch - layer {i}")
+        ax.imshow(layer)
+
+    plt.tight_layout()
+    fig.savefig(RESULTS_3D / "3d_patch_og.png", dpi=600)
+
+    seg_3d = segment_cellpose(patch, do_3d=True)
+    seg_3d_outlines = outlines_list(seg_3d)
+
+    fig, axs = plt.subplots(3, 4)
+
+    for i, (layer, ax) in enumerate(zip(patch, axs.ravel())):
+        ax.axis("off")
+        ax.set_title(f"nucleus segmentation - layer {i}")
+        ax.imshow(layer)
+        [ax[i].plot(mask[:, 0], mask[:, 1], 'r', linewidth=.5, alpha=1) for mask in seg_3d_outlines[i, :, :]]
+
+    plt.tight_layout()
+    fig.savefig(RESULTS_3D / "3d_patch_segmentation.png", dpi=600)
+
+    return 0
+
+
+def transcripts_assignments(masks: np.ndarray, adata, save_path: str, qv_cutoff: float = 20.0):
+    """ This is a function that will be moved in another section but used testing nucleus transcripts assignments """
+
+    transcripts_df = adata.uns["spots"]
+
+    mask_dims = {"z_size": masks.shape[0], "x_size": masks.shape[2], "y_size": masks.shape[1]}
+
+    # Iterate through all transcripts
+    transcripts_nucleus_index = []
+    for index, row in transcripts_df.iterrows():
+
+        x = row['x_location']
+        y = row['y_location']
+        z = row['z_location']
+        qv = row['qv']
+
+        # Ignore transcript below user-specified cutoff
+        if qv < qv_cutoff:
+            continue
+
+        # Convert transcript locations from physical space to image space
+        pix_size = 0.2125
+        z_slice_micron = 3
+        x_pixel = x / pix_size
+        y_pixel = y / pix_size
+        z_slice = z / z_slice_micron
+
+        # Add guard rails to make sure lookup falls within image boundaries.
+        x_pixel = min(max(0, x_pixel), mask_dims["x_size"] - 1)
+        y_pixel = min(max(0, y_pixel), mask_dims["y_size"] - 1)
+        z_slice = min(max(0, z_slice), mask_dims["z_size"] - 1)
+
+        # Look up cell_id assigned by Cellpose. Array is in ZYX order.
+        nucleus_id = masks[round(z_slice), round(y_pixel), round(x_pixel)]
+
+        # If cell_id is not 0 at this point, it means the transcript is associated with a cell
+        if nucleus_id != 0:
+            # Increment count in feature-cell matrix
+            transcripts_nucleus_index.append(nucleus_id)
+        else:
+            transcripts_nucleus_index.append(None)
+
+    adata.uns["spot"]["nucleus_id"] = transcripts_nucleus_index
+    if str(save_path).endswith("h5ad"):
+        adata.write_h5ad(save_path)
+    else:
+        adata.write_h5ad(str(save_path)+".h5ad")
+
+    return adata
 
 
 def build_results_dir():
     global RESULTS
     RESULTS = Path("../../scratch/lbrunsch/results/nucleus_segmentation")
     os.makedirs(RESULTS, exist_ok=True)
+    global RESULTS_3D
+    RESULTS_3D = RESULTS / "3d_segmentation"
+    os.makedirs(RESULTS_3D, exist_ok=True)
 
 
 if __name__ == "__main__":
 
-    run = "2d"
+    run = "3d"
 
     build_results_dir()
 
