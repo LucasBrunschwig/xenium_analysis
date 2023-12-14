@@ -165,7 +165,7 @@ def load_xenium_data(path: Path, formatted: bool = True):
     elif not formatted:
         adata = format_xenium_adata(path, output_path=path)
     else:
-        print("Formatted Expect a '.h5ad' file path")
+        raise ValueError("Formatted Expect a '.h5ad' file path")
 
     # ##############################################################
     # Deprecated
