@@ -9,12 +9,18 @@ from cellpose.utils import outlines_list
 from tifffile import tifffile
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 
 # Relative import
 from utils import load_xenium_data
 
 RESULTS = Path()
 RESULTS_3D = Path()
+
+if torch.cuda.is_available():
+    print("GPU available", torch.cuda.current_device())
+else:
+    print("No GPU available")
 
 
 def segment_cellpose(
@@ -53,7 +59,8 @@ def segment_cellpose(
     # - diameter (default: 30), flow threshold (0.4)
     # - batch size (224x224 patches to run simultaneously
     # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
-    masks, flows, styles, diameters = model.eval(x=img, channels=[0, 0], net_avg=net_avg, diameter=None, do_3D=do_3d)
+    masks, flows, styles, diameters = model.eval(x=img, batch_size=4, channels=[0, 0], net_avg=net_avg,
+                                                 diameter=30, do_3D=do_3d)
 
     return masks
 
