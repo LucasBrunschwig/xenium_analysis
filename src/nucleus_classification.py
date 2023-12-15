@@ -4,6 +4,7 @@ import os
 
 # Third party
 import anndata
+import pandas as pd
 from shapely.geometry import Point, Polygon
 import numpy as np
 import pickle
@@ -11,18 +12,19 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from scipy.spatial.distance import cdist
+import seaborn as sns
 
 # Relative import
-from utils import load_xenium_data
+from utils import load_xenium_data, preprocess_transcriptomics
 from gene_locus import get_gene_location
 from segment_nucleus import load_image, segment_cellpose, transcripts_assignments
-
+from leiden_clustering import compute_ref_labels
 RESULTS = Path()
 
 
 def nucleus_segmentation():
     """ Run this with ML work students"""
-    raise NotImplementedError()
+    raise NotImplementedError("ML Students")
 
 
 def assign_transcript_to_nucleus_cellpose(adata: anndata.AnnData, save_path: str, img_path: Path,
@@ -69,7 +71,7 @@ def assign_transcript_to_nucleus_xenium(adata, save_path: str):
             cell_polygons = pickle.load(file)
 
     # Check if already processed
-    if not os.path.isfile(RESULTS / save_path):
+    if not os.path.isfile(save_path):
         coord = adata.uns["spots"][["x_location", "y_location", "z_location"]]
         cell_id = {}
         with tqdm(total=len(cell_polygons), desc="Processing") as pbar:
@@ -97,9 +99,9 @@ def assign_transcript_to_nucleus_xenium(adata, save_path: str):
         coord["cell_id"] = coord["cell_id"].apply(lambda x: int(x[0]) if len(x) > 0 else None)
         adata.uns["spots"]["cell_id"] = coord["cell_id"]
 
-        adata.write_h5ad(RESULTS / save_path)
+        adata.write_h5ad(save_path)
     else:
-        adata = anndata.read_h5ad(RESULTS / save_path)
+        adata = anndata.read_h5ad(save_path)
 
     return adata
 
@@ -115,6 +117,45 @@ def visualize_plot():
     raise NotImplementedError()
 
 
+def visualize_cell_area_cluster(adata, cat: str = "nucleus_boundaries"):
+    """ Do violin plots either related to cells assignments or nucleus assignments """
+    # Leiden Clustering Requires to create a matrix of n_cells by n_genes and each case = number of transcripts
+    # Create anndata object from this to get cell_features matrix
+    # Perform preprocessing and clustering with utils function
+    # Once this is we need to plot the cell location of clusters and compare it to original clustering
+    # Add to the observations one column for clusters and one column for cell area -> violin plot
+    # Ideally, get main marker genes for each plots
+
+    # get_label
+    adata = preprocess_transcriptomics(adata, filter_=True)
+    adata.obs["leiden"] = compute_ref_labels(adata)
+
+    cell_area = []
+    for cell_id in adata.uns[cat]["cell_id"].unique():
+        cell_vertices = adata.uns[cat][adata.uns[cat]["cell_id"] == cell_id]
+        poly = Polygon(cell_vertices.copy().apply(lambda p: (int(p["vertex_x"]), int(p["vertex_y"])), axis=1).tolist())
+        cell_area.append(poly.area)
+
+    adata.obs["cell_area"] = np.array(cell_area)[adata.obs.cell_id.to_numpy()-1]
+
+    sns.violinplot(data=adata.obs, x="leiden", y="cell_area")
+    plt.savefig(RESULTS / "violin_cluster_nucleus_area.png")
+
+
+def build_nucleus_feature_matrix(transcripts_df):
+    """ Requires transcriipt with each transcripts attach to a nucleus"""
+
+
+def compute_cell_area(adata):
+    """
+
+    Returns
+    -------
+
+    """
+
+    adata
+
 def main(path_replicates_: list, panel_path_: Path, segmentation_method: str):
 
     # Load Gene Panel Location
@@ -123,7 +164,9 @@ def main(path_replicates_: list, panel_path_: Path, segmentation_method: str):
 
     # Load Annotated Data
     print("Loading Xenium Replicate")
-    annotated_data = load_xenium_data(path_replicates_[0], formatted=False)
+    annotated_data = load_xenium_data(str(path_replicates_[0]) + ".h5ad", formatted=True)
+
+    # visualize_cell_area_cluster(annotated_data)
 
     # Select one cell and look at what it is containing
     # Work of the ML students will be extremely helpful here
@@ -145,23 +188,30 @@ def main(path_replicates_: list, panel_path_: Path, segmentation_method: str):
     transcripts_assignments_ = annotated_data.uns["spots"]
     transcripts_assignments_["feature_name"] = transcripts_assignments_["feature_name"].str.upper()  # case sensitive
     map_loci.index = map_loci.index.str.upper()  # case sensitive
-    print(f"{transcripts_assignments_['cell_id'].value_counts()}")
+    # print(f"{transcripts_assignments_['cell_id'].value_counts()}")
     counts = transcripts_assignments_['cell_id'].value_counts()
+    # print(f"% of non-assigned transcripts {segmentation_method}-nucleus "
+    #       f"{len(np.where(np.isnan(transcripts_assignments_['cell_id'].tolist()))[0])/len(transcripts_assignments_):.2f}")
+    # print(f"% of non-assigned transcripts "
+    #       f"xenium-nucleus {1-len(np.where(transcripts_assignments_['overlaps_nucleus'].tolist())[0])/len(transcripts_assignments_):.2f}")
+    # print(f"% of non-assigned transcripts xenium - cells {1-annotated_data.X.toarray().sum()/len(transcripts_assignments_):.2f}")
+    # # Using xenium nucleus assignment 0.65 / 0.63
+    # # Using xenium cell assignment 0.22
 
     # Plot Transcripts per
-    plt.figure()
-    plt.grid()
-    plt.hist(counts.tolist(), color='b', bins=100)
-    plt.vlines(x=50, ymin=0, ymax=12000, color='r', label="filter nucleus < 50 transcripts")
-    plt.vlines(x=min(counts.tolist()), ymin=0, ymax=11000, color='w', label=f"min transcript = {min(counts.tolist())}")
-    plt.vlines(x=max(counts.tolist()), ymin=0, ymax=11000, color='w', label=f"max transcript = {max(counts.tolist())}")
-    plt.xlabel("Number of transcripts inside nucleus")
-    plt.ylabel("Counts")
-    plt.legend()
-    plt.title("Number transcripts per Nucleus")
-    plt.tight_layout()
-    plt.savefig(RESULTS / "Hist_Transcripts.png")
-    plt.close()
+    # plt.figure()
+    # plt.grid()
+    # plt.hist(counts.tolist(), color='b', bins=100)
+    # plt.vlines(x=50, ymin=0, ymax=12000, color='r', label="filter nucleus < 50 transcripts")
+    # plt.vlines(x=min(counts.tolist()), ymin=0, ymax=11000, color='w', label=f"min transcript = {min(counts.tolist())}")
+    # plt.vlines(x=max(counts.tolist()), ymin=0, ymax=11000, color='w', label=f"max transcript = {max(counts.tolist())}")
+    # plt.xlabel("Number of transcripts inside nucleus")
+    # plt.ylabel("Counts")
+    # plt.legend()
+    # plt.title("Number transcripts per Nucleus")
+    # plt.tight_layout()
+    # plt.savefig(RESULTS / "Hist_Transcripts.png")
+    # plt.close()
 
     # filter by > 50 transcripts -> 123'000 cells
     filter_index = counts[counts > 50].index.tolist()
@@ -173,6 +223,8 @@ def main(path_replicates_: list, panel_path_: Path, segmentation_method: str):
 
     chrom_distances = {chrom1: {chrom2: [] for chrom2 in map_loci["chrom_arm"].unique()}
                        for chrom1 in map_loci["chrom_arm"].unique()}
+
+
 
     # Visualize each cell transcripts distribution in 3D
     for cell_id in filter_index:
@@ -270,27 +322,39 @@ def main(path_replicates_: list, panel_path_: Path, segmentation_method: str):
 
     closeness_hist_plot = RESULTS / f"closeness_hists_{segmentation_method}"
     os.makedirs(closeness_hist_plot, exist_ok=True)
+
     for chrom_, distances in chrom_distances.items():
         closeness_hist_plot_chrom = closeness_hist_plot / f"chr{chrom_}"
         os.makedirs(closeness_hist_plot_chrom, exist_ok=True)
-        for chrom_2, values in distances.items():
-            if len(values) > 0:
-                plt.figure()
-                plt.grid()
-                plt.hist(values, color='b', bins=50)
-                plt.vlines(x=min(values), ymin=0, ymax=1, color='w',
-                           label=f"min dist = {min(values)}")
-                plt.vlines(x=max(values), ymin=0, ymax=1, color='w',
-                           label=f"max dist = {max(values)}")
-                plt.vlines(x=np.mean(values), ymin=0, ymax=1, color='w',
-                           label=f"mean dist = {np.mean(values)}")
-                plt.xlabel("Average distance")
-                plt.ylabel("Counts")
-                plt.legend()
-                plt.title(f"Average distance between chromosome transcripts: chr{chrom_}-chr{chrom_2}")
-                plt.tight_layout()
-                plt.savefig(closeness_hist_plot_chrom / f"chr{chrom_}-chr{chrom_2}.png")
-                plt.close()
+        del distances[chrom_]
+        df = pd.DataFrame(distances)
+
+        # Reshape the DataFrame for Seaborn's violin plot
+        df = df.melt(var_name='Group', value_name='Value')
+
+        # Create a violin plot using Seaborn
+        plt.figure(figsize=(30, 6))  # Adjust the figure size as needed
+        sns.violinplot(x='Group', y='Value', data=df, inner='quartile')
+        plt.title(f'Distance Violin {chrom_}')
+        plt.savefig(f"violin_plot_{chrom_}.png")
+        # for chrom_2, values in distances.items():
+        #     if len(values) > 0:
+                # plt.figure()
+                # plt.grid()
+                # plt.hist(values, color='b', bins=50)
+                # plt.vlines(x=min(values), ymin=0, ymax=1, color='w',
+                #            label=f"min dist = {min(values)}")
+                # plt.vlines(x=max(values), ymin=0, ymax=1, color='w',
+                #            label=f"max dist = {max(values)}")
+                # plt.vlines(x=np.mean(values), ymin=0, ymax=1, color='w',
+                #            label=f"mean dist = {np.mean(values)}")
+                # plt.xlabel("Average distance")
+                # plt.ylabel("Counts")
+                # plt.legend()
+                # plt.title(f"Average distance between chromosome transcripts: chr{chrom_}-chr{chrom_2}")
+                # plt.tight_layout()
+                # plt.savefig(closeness_hist_plot_chrom / f"chr{chrom_}-chr{chrom_2}.png")
+                # plt.close()
 
     return 0
 
@@ -311,7 +375,7 @@ if __name__ == "__main__":
     mouse_brain_path = Path(r"../../scratch/lbrunsch/data/Gene_Panels"
                             r"/Xenium_V1_FF_Mouse_Brain_MultiSection_Input_gene_groups.csv")
 
-    segment = "cellpose"
+    segment = "xenium"
 
     create_results_dir()
 
