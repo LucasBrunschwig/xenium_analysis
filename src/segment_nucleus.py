@@ -19,7 +19,7 @@ import platform
 
 if platform.system() != "Windows":
     import resource
-    # Set the maximum memory usage in bytes
+    # Set the maximum memory usage in bytes (300GB)
     max_memory = int(3e11)
     resource.setrlimit(resource.RLIMIT_AS, (max_memory, max_memory))
 
@@ -375,6 +375,6 @@ if __name__ == "__main__":
         img_type = "mip"
         run_cellpose_2d(path_replicate_1, img_type)
     elif run == "3d":
-        level = 1
+        level = 2
         run_cellpose_3d(path_replicate_1, level, diameter_=10)
 
