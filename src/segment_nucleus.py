@@ -109,9 +109,23 @@ def load_image(path_replicate: Path, img_type: str, level_: int = 0):
     elif img_type == "focus":
         img_file = str(path_replicate / "morphology_focus.ome.tif")
     elif img_type == "stack":
-        img_file = str(path_replicate / "morphology.ome.tif")
-        with tifffile.TiffFile(img_file) as tif:
-            image = tif.series[0].levels[level_].asarray()
+        img_file = str(path_replicate / f"level_{level_}_morphology.ome.tif")
+
+        if os.path.isfile(img_file):
+            image = tifffile.imread(img_file)
+        else:
+            img_file_og = str(path_replicate / "morphology.ome.tif")
+            with tifffile.TiffFile(img_file_og) as tif:
+                image = tif.series[0].levels[level_].asarray()
+            tifffile.imwrite(
+                img_file,
+                image,
+                photometric='minisblack',
+                dtype='uint16',
+                tile=(1024, 1024),
+                compression='JPEG_2000_LOSSY',
+                metadata={'axes': 'ZYX'},
+            )
         return image
     else:
         raise ValueError("Not a type of image")
@@ -340,6 +354,6 @@ if __name__ == "__main__":
         img_type = "mip"
         run_cellpose_2d(path_replicate_1, img_type)
     elif run == "3d":
-        level = 0
+        level = 2
         run_cellpose_3d(path_replicate_1, level)
 
