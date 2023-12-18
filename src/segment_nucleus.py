@@ -271,7 +271,7 @@ def run_cellpose_3d(path_replicate_: Path, level_: int = 0, diameter_: int = 10)
     print("Segmenting the whole image")
 
     if not os.path.isfile(RESULTS_3D / "mask_outline.pkl"):
-        seg_3d = segment_cellpose(img, do_3d=True)
+        seg_3d = segment_cellpose(img, do_3d=True, diameter=diameter_)
         with open(RESULTS_3D / f"mask_level{level_}_diameter{diameter_}.pkl", "wb") as file:
             pickle.dump(seg_3d, file)
         seg_3d_outlines = outlines_list(seg_3d, multiprocessing=False)
