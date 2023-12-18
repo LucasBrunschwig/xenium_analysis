@@ -14,13 +14,12 @@ import torch
 # Relative import
 from utils import load_xenium_data
 
-import resource
 import platform
 
-
 if platform.system() != "Windows":
+    import resource
     # Set the maximum memory usage in bytes
-    max_memory = int(2e11)
+    max_memory = int(1e11)
     resource.setrlimit(resource.RLIMIT_AS, (max_memory, max_memory))
 
 RESULTS = Path()
