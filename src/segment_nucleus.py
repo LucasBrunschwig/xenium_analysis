@@ -76,7 +76,7 @@ def segment_cellpose(
     # - diameter (default: 30), flow threshold (0.4)
     # - batch size (224x224 patches to run simultaneously
     # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
-    masks, flows, styles, diameters = model.eval(x=img, batch_size=4, channels=[0, 0], net_avg=net_avg,
+    masks, flows, styles, diameters = model.eval(x=[img], batch_size=4, channels=[0, 0], net_avg=net_avg,
                                                  diameter=diameter, do_3D=do_3d, z_axis=0, progress=True)
 
     return masks
