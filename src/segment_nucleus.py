@@ -128,26 +128,29 @@ def load_image(path_replicate: Path, img_type: str, level_: int = 0):
     elif img_type == "stack":
         img_file = str(path_replicate / f"level_{level_}_morphology.ome.tif")
 
-        if os.path.isfile(img_file):
-            image = tifffile.imread(img_file)
-        else:
-            img_file_og = str(path_replicate / "morphology.ome.tif")
-            with tifffile.TiffFile(img_file_og) as tif:
-                image = tif.series[0].levels[level_].asarray()
-            tifffile.imwrite(
-                img_file,
-                image,
-                photometric='minisblack',
-                dtype='uint16',
-                tile=(1024, 1024),
-                compression='JPEG_2000_LOSSY',
-                metadata={'axes': 'ZYX'},
-            )
+        # if os.path.isfile(img_file):
+        #     image = tifffile.imread(img_file)
+        # else:
+        img_file_og = str(path_replicate / "morphology.ome.tif")
+        with tifffile.TiffFile(img_file_og) as tif:
+             image = tif.series[0].levels[level_].asarray()
+        #     tifffile.imwrite(
+        #         img_file,
+        #         image,
+        #         photometric='minisblack',
+        #         dtype='uint16',
+        #         tile=(1024, 1024),
+        #         compression='JPEG_2000_LOSSY',
+        #         metadata={'axes': 'ZYX'},
+        #     )
+        print("Image shape:", image.shape)
         return image
     else:
         raise ValueError("Not a type of image")
 
-    return tifffile.imread(img_file)
+    image = tifffile.imread(img_file)
+    print("Image shape:", image.shape)
+    return image
 
 
 def run_cellpose_2d(path_replicate: Path, img_type: str = "mip"):
@@ -271,7 +274,7 @@ def run_cellpose_3d(path_replicate_: Path, level_: int = 0, diameter_: int = 10)
         seg_3d = segment_cellpose(img, do_3d=True)
         with open(RESULTS_3D / f"mask_level{level_}_diameter{diameter_}.pkl", "wb") as file:
             pickle.dump(seg_3d, file)
-        seg_3d_outlines = outlines_list(seg_3d)
+        seg_3d_outlines = outlines_list(seg_3d, multiprocessing=False)
         with open(RESULTS_3D / f"mask_outline{level_}_diameter{diameter_}.pkl", "wb") as file:
             pickle.dump(seg_3d_outlines, file)
     else:
@@ -372,6 +375,6 @@ if __name__ == "__main__":
         img_type = "mip"
         run_cellpose_2d(path_replicate_1, img_type)
     elif run == "3d":
-        level = 3
+        level = 1
         run_cellpose_3d(path_replicate_1, level, diameter_=10)
 
