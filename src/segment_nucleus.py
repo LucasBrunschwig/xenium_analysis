@@ -14,6 +14,13 @@ import torch
 # Relative import
 from utils import load_xenium_data
 
+import resource
+import sys
+
+# Set the maximum memory usage in bytes
+max_memory = int(2e11)
+resource.setrlimit(resource.RLIMIT_AS, (max_memory, max_memory))
+
 RESULTS = Path()
 RESULTS_3D = Path()
 
@@ -21,6 +28,7 @@ if torch.cuda.is_available():
     print("GPU available", torch.cuda.current_device())
 else:
     print("No GPU available")
+
 
 
 def segment_cellpose(
