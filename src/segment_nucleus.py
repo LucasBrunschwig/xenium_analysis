@@ -30,7 +30,6 @@ else:
     print("No GPU available")
 
 
-
 def segment_cellpose(
         img: np.ndarray,
         model_type: str = "nuclei",
@@ -362,6 +361,6 @@ if __name__ == "__main__":
         img_type = "mip"
         run_cellpose_2d(path_replicate_1, img_type)
     elif run == "3d":
-        level = 2
+        level = 0
         run_cellpose_3d(path_replicate_1, level)
 
