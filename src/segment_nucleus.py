@@ -35,6 +35,7 @@ def segment_cellpose(
         model_type: str = "nuclei",
         net_avg: bool = False,
         do_3d: bool = False,
+        diameter: int = 30,
 ) -> np.ndarray:
     """Run cellpose and get masks
 
@@ -44,6 +45,7 @@ def segment_cellpose(
     model_type: model type to load
     net_avg: evaluate 1 model or average of 4 built-in models
     do_3d: perform 3D nuclear segmentation requires 3D array
+    diameter: estimated size of nucleus
 
     Returns
     -------
@@ -67,7 +69,7 @@ def segment_cellpose(
     # - batch size (224x224 patches to run simultaneously
     # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
     masks, flows, styles, diameters = model.eval(x=img, batch_size=4, channels=[0, 0], net_avg=net_avg,
-                                                 diameter=30, do_3D=do_3d)
+                                                 diameter=diameter, do_3D=do_3d)
 
     return masks
 
@@ -240,9 +242,9 @@ def run_cellpose_2d(path_replicate: Path, img_type: str = "mip"):
     return 0
 
 
-def run_cellpose_3d(path_replicate_: Path, level: int = 0):
+def run_cellpose_3d(path_replicate_: Path, level_: int = 0, diameter_: int = 10):
 
-    img = load_image(path_replicate_, img_type="stack", level_=level)
+    img = load_image(path_replicate_, img_type="stack", level_=level_)
     patch, boundaries = image_patch(img, square_size=700)
 
     fig, axs = plt.subplots(3, 4)
@@ -253,19 +255,19 @@ def run_cellpose_3d(path_replicate_: Path, level: int = 0):
         ax.imshow(layer)
 
     plt.tight_layout()
-    fig.savefig(RESULTS_3D / "3d_patch_og.png", dpi=600)
+    fig.savefig(RESULTS_3D / f"3d_patch_og_level{level_}_diameter{diameter_}.png", dpi=600)
 
     print("Segmenting the whole image")
 
     if not os.path.isfile(RESULTS_3D / "mask_outline.pkl"):
         seg_3d = segment_cellpose(img, do_3d=True)
-        with open(RESULTS_3D / "mask.pkl", "wb") as file:
+        with open(RESULTS_3D / f"mask_level{level_}_diameter{diameter_}.pkl", "wb") as file:
             pickle.dump(seg_3d, file)
         seg_3d_outlines = outlines_list(seg_3d)
-        with open(RESULTS_3D / "mask_outline.pkl", "wb") as file:
+        with open(RESULTS_3D / f"mask_outline{level_}_diameter{diameter_}.pkl", "wb") as file:
             pickle.dump(seg_3d_outlines, file)
     else:
-        with open(RESULTS_3D / "mask_outline.pkl", "rb") as file:
+        with open(RESULTS_3D / f"mask_outline{level_}_diameter{diameter_}.pkl", "rb") as file:
             seg_3d_outlines = pickle.load(file)
 
     print("Plotting Resulting Segmentation")
@@ -282,7 +284,7 @@ def run_cellpose_3d(path_replicate_: Path, level: int = 0):
         [ax[i].plot(mask[:, 0], mask[:, 1], 'r', linewidth=.5, alpha=1) for mask in seg_3d_outlines[i, :, :]]
 
     plt.tight_layout()
-    fig.savefig(RESULTS_3D / "3d_patch_segmentation.png", dpi=600)
+    fig.savefig(RESULTS_3D / f"3d_patch_segmentation_level{level_}_diameter{diameter_}.png", dpi=600)
 
     return 0
 
@@ -362,5 +364,5 @@ if __name__ == "__main__":
         run_cellpose_2d(path_replicate_1, img_type)
     elif run == "3d":
         level = 0
-        run_cellpose_3d(path_replicate_1, level)
+        run_cellpose_3d(path_replicate_1, level, diameter_=10)
 
