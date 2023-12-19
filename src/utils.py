@@ -248,6 +248,67 @@ def get_name_from_path(path: Path) -> str:
     return str(path).split(os.sep)[-1]
 
 
+def load_image(path_replicate: Path, img_type: str, level_: int = 0):
+    if img_type == "mip":
+        img_file = str(path_replicate / "morphology_mip.ome.tif")
+        with tifffile.TiffFile(img_file) as tif:
+             image = tif.series[0].levels[level_].asarray()
+    elif img_type == "focus":
+        img_file = str(path_replicate / "morphology_focus.ome.tif")
+        with tifffile.TiffFile(img_file) as tif:
+            image = tif.series[0].levels[level_].asarray()
+    elif img_type == "stack":
+        img_file = str(path_replicate / "morphology.ome.tif")
+        with tifffile.TiffFile(img_file) as tif:
+             image = tif.series[0].levels[level_].asarray()
+    else:
+        raise ValueError("Not a type of image")
+
+    print("Image shape:", image.shape)
+    return image
+
+
+def image_patch(img_array, square_size: int = 400, format_: str = "test"):
+    """
+
+    Parameters
+    ----------
+    img_array
+    square_size: the length of the image square
+    format_: "test" returns one square patch at the image center (width = square size)
+             "training": returns a list of patches adapting the square size to match the image size
+
+    Returns
+    -------
+    returns: list of patches or one patch as np.ndarray
+    """
+
+    if square_size is None:
+        return [img_array, [[0, img_array.shape[0]], [0, img_array.shape[1]]]]
+
+    if len(img_array.shape) == 2:
+        coord_1, coord_2 = 0, 1
+    else:
+        coord_1, coord_2 = 1, 2
+
+    l_t = img_array.shape[coord_1] // 2 - square_size // 2
+    r_t = img_array.shape[coord_1] // 2 + square_size // 2
+    l_b = img_array.shape[coord_2] // 2 - square_size // 2
+    r_b = img_array.shape[coord_2] // 2 + square_size // 2
+
+    if format_ == "test":
+        if len(img_array.shape) == 2:
+            return [img_array[l_t:r_t,l_b:r_b],
+                    ([l_t, r_t], [l_b, r_b])]
+        else:
+            return [img_array[:, l_t:r_t, l_b:r_b],
+                    ([0, l_t, r_t], [img_array.shape[0], l_b, r_b])]
+    elif format_ == "whole-image":
+        return [img_array, [[0, img_array.shape[0]], [0, img_array.shape[1]]]]
+    else:
+        raise NotImplementedError(f" {format_} not implemented yet")
+
+
 if __name__ == "__main__":
     data_path = Path("../../scratch/lbrunsch/data")
     path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"

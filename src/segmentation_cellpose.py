@@ -6,6 +6,7 @@ from pathlib import Path
 # Third party
 from cellpose import models
 from cellpose.utils import outlines_list
+from cellpose.contrib.distributed_segmentation import segment
 from tifffile import tifffile
 import matplotlib.pyplot as plt
 import numpy as np
@@ -64,20 +65,25 @@ def segment_cellpose(
     # Init model
     model = models.Cellpose(gpu=True, model_type=model_type)
 
-    # Eval model
-    # Various Argument:
-    # - x: list of array of images list(2D/3D) or array of 2D/3D images, or 4D array of image
-    # - channels: length(2)
-    #       - 1: channel to segment (0=grayscale, 1=red, 2=green, 3=blue)
-    #       - 2: optional nuclear channel (0=none, 1=red, 2=green 3=blue)
-    #       in DAPI images no different channels for nucleus
-    # - invert(false), normalize(true)
-    # - net_avg: 4 built-in networks and averages them (false)
-    # - diameter (default: 30), flow threshold (0.4)
-    # - batch size (224x224 patches to run simultaneously
-    # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
-    masks, flows, styles, diameters = model.eval(x=[img], batch_size=16, channels=[0, 0], net_avg=net_avg,
-                                                 diameter=diameter, do_3D=do_3d, z_axis=0, progress=True)
+    if do_3d:
+        # fast_mode, use_anisotropy, iou_depth, iou_threshold
+        masks = segment(img, channels=[0, 0], model_type=model_type,diameter=diameter)
+
+    else:
+        # Eval model
+        # Various Argument:
+        # - x: list of array of images list(2D/3D) or array of 2D/3D images, or 4D array of image
+        # - channels: length(2)
+        #       - 1: channel to segment (0=grayscale, 1=red, 2=green, 3=blue)
+        #       - 2: optional nuclear channel (0=none, 1=red, 2=green 3=blue)
+        #       in DAPI images no different channels for nucleus
+        # - invert(false), normalize(true)
+        # - net_avg: 4 built-in networks and averages them (false)
+        # - diameter (default: 30), flow threshold (0.4)
+        # - batch size (224x224 patches to run simultaneously
+        # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
+        masks, flows, styles, diameters = model.eval(x=[img], batch_size=16, channels=[0, 0], net_avg=net_avg,
+                                                     diameter=diameter, do_3D=do_3d, z_axis=0, progress=True)
 
     return masks
 
@@ -353,7 +359,7 @@ def transcripts_assignments(masks: np.ndarray, adata, save_path: str, qv_cutoff:
 
 def build_results_dir():
     global RESULTS
-    RESULTS = Path("../../scratch/lbrunsch/results/nucleus_segmentation")
+    RESULTS = Path("../../scratch/lbrunsch/results/nucleus_segmentation/cellpose")
     os.makedirs(RESULTS, exist_ok=True)
     global RESULTS_3D
     RESULTS_3D = RESULTS / "3d_segmentation"
@@ -375,6 +381,6 @@ if __name__ == "__main__":
         img_type = "mip"
         run_cellpose_2d(path_replicate_1, img_type)
     elif run == "3d":
-        level = 1
+        level = 4
         run_cellpose_3d(path_replicate_1, level, diameter_=10)
 
