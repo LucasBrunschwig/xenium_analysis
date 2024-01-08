@@ -4,7 +4,7 @@ Author: Lucas Brunschwig
 Email: lucas.brunschwig@epfl.ch
 GitHub: @LucasBrunschwig
 
-Description: This file implements cell type association compared using leiden clustering from leiden_clustering.py
+Description: This file implements cell type association compared using leiden clustering, Cell2Location, others
 """
 
 # Std

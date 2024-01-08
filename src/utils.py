@@ -268,7 +268,7 @@ def load_image(path_replicate: Path, img_type: str, level_: int = 0):
     return image
 
 
-def image_patch(img_array, square_size: int = 400, format_: str = "test"):
+def image_patch(img_array, square_size: int = 400, format_: str = "test", orig: tuple = None):
     """
 
     Parameters
@@ -277,6 +277,7 @@ def image_patch(img_array, square_size: int = 400, format_: str = "test"):
     square_size: the length of the image square
     format_: "test" returns one square patch at the image center (width = square size)
              "training": returns a list of patches adapting the square size to match the image size
+    orig: choose the origin of the square
 
     Returns
     -------
@@ -286,15 +287,21 @@ def image_patch(img_array, square_size: int = 400, format_: str = "test"):
     if square_size is None:
         return [img_array, [[0, img_array.shape[0]], [0, img_array.shape[1]]]]
 
-    if len(img_array.shape) == 2:
-        coord_1, coord_2 = 0, 1
-    else:
-        coord_1, coord_2 = 1, 2
+    if orig is None:
+        if len(img_array.shape) == 2:
+            coord_1, coord_2 = 0, 1
+        else:
+            coord_1, coord_2 = 1, 2
 
-    l_t = img_array.shape[coord_1] // 2 - square_size // 2
-    r_t = img_array.shape[coord_1] // 2 + square_size // 2
-    l_b = img_array.shape[coord_2] // 2 - square_size // 2
-    r_b = img_array.shape[coord_2] // 2 + square_size // 2
+        l_t = img_array.shape[coord_1] // 2 - square_size // 2
+        r_t = img_array.shape[coord_1] // 2 + square_size // 2
+        l_b = img_array.shape[coord_2] // 2 - square_size // 2
+        r_b = img_array.shape[coord_2] // 2 + square_size // 2
+    else:
+        l_t = orig[0]
+        r_t = orig[0] + square_size
+        l_b = orig[1]
+        r_b = orig[1] + square_size
 
     if format_ == "test":
         if len(img_array.shape) == 2:
