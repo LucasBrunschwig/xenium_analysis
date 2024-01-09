@@ -211,7 +211,7 @@ def run_stardist_3d(path_replicate_: Path, model_type_: str, level_: int = 0, di
 
 def build_results_dir():
     global RESULTS
-    RESULTS = Path("../../../scratch/lbrunsch/results/nucleus_segmentation/stardist")
+    RESULTS = Path("../../scratch/lbrunsch/results/nucleus_segmentation/stardist")
     os.makedirs(RESULTS, exist_ok=True)
     global RESULTS_3D
     RESULTS_3D = RESULTS / "3d_seg"
@@ -231,7 +231,7 @@ if __name__ == "__main__":
     optimize = True
 
     # Path
-    data_path = Path("../../../scratch/lbrunsch/data")
+    data_path = Path("../../scratch/lbrunsch/data")
     path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
 
     if run == "2D":
