@@ -13,7 +13,7 @@ from stardist.models import StarDist2D, StarDist3D
 from csbdeep.utils import normalize
 from itertools import product
 
-from ..utils import load_image, image_patch, check_cuda
+from src.utils import load_image, image_patch, check_cuda
 from utils import run_segmentation_2d, run_patch_segmentation_2d, run_segmentation_location_2d
 
 
