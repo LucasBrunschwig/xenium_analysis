@@ -14,9 +14,14 @@ from csbdeep.utils import normalize
 from itertools import product
 
 import sys
-sys.path.append("..")
+import path
+# directory reach
+directory = path.path(__file__).abspath()
 
-from src import utils as src_utils
+# setting path
+sys.path.append(directory.parent.parent)
+
+from .. import utils as src_utils
 from . import utils as segmentation_utils
 
 
