@@ -21,9 +21,10 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 # Add the parent directory to the Python path
 parent_dir = os.path.abspath(os.path.join(script_dir, '..'))
 sys.path.append(parent_dir)
+print(parent_dir)
 
 # Relative import
-from ..utils import load_image, image_patch, check_cuda
+from src.utils import load_image, image_patch, check_cuda
 from utils import run_segmentation_2d, run_patch_segmentation_2d, run_segmentation_location_2d
 
 
