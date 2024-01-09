@@ -13,6 +13,10 @@ from stardist.models import StarDist2D, StarDist3D
 from csbdeep.utils import normalize
 from itertools import product
 
+# test/main.py
+import sys
+sys.path.append("..")
+
 from .. import utils as src_utils
 from . import utils as segmentation_utils
 
