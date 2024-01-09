@@ -1,9 +1,14 @@
 from pathlib import Path
 from typing import Callable
+import platform
 
 import matplotlib.pyplot as plt
 
-from .. import utils as src_utils
+
+if platform.system() != "Windows":
+    from .. import utils as src_utils
+else:
+    import src.utils as src_utils
 
 
 def get_xenium_nucleus_boundaries(path_replicate_: Path, boundaries: list = None):

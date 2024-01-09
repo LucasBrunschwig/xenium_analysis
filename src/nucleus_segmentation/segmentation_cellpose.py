@@ -2,19 +2,21 @@
 import os
 import pickle
 from pathlib import Path
+from typing import Optional
 
 # Third party
 from cellpose import models
 from cellpose.utils import outlines_list
 from cellpose.contrib.distributed_segmentation import segment
-from tifffile import tifffile
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import logging
+from itertools import product
 
 # Relative import
-from src.utils import load_xenium_data, load_image, image_patch
+import src.utils as src_utils
+import utils as segmentation_utils
 
 import platform
 
@@ -37,10 +39,10 @@ def init_logger():
 
 def segment_cellpose(
         img: np.ndarray,
-        model_type: str = "nuclei",
+        model_type_: str = "nuclei",
         net_avg: bool = False,
         do_3d: bool = False,
-        diameter: int = 30,
+        diameter_: int = 30,
         **kwargs
 ) -> np.ndarray:
     """Run cellpose and get masks
@@ -48,10 +50,10 @@ def segment_cellpose(
     Parameters
     ----------
     img: Can be list of 2D/3D images, or array of 2D/3D images, or 4D image array
-    model_type: model type to load
+    model_type_: model type to load
     net_avg: evaluate 1 model or average of 4 built-in models
     do_3d: perform 3D nuclear segmentation requires 3D array
-    diameter: estimated size of nucleus
+    diameter_: estimated size of nucleus
 
     Returns
     -------
@@ -59,14 +61,15 @@ def segment_cellpose(
         labelled image, where 0 = no masks; 1, 2, ... = mask labels
     """
 
-    # Init model
-    model = models.Cellpose(gpu=True, model_type=model_type)
-
     if do_3d:
         # fast_mode, use_anisotropy, iou_depth, iou_threshold
-        masks = segment(img, channels=[0, 0], model_type=model_type, diameter=diameter)
+        masks = segment(img, channels=[0, 0], model_type=model_type_, diameter=diameter_)
 
     else:
+
+        # Init model
+        model = models.Cellpose(gpu=True, model_type=model_type_)
+
         # Eval model
         # Various Argument:
         # - x: list of array of images list(2D/3D) or array of 2D/3D images, or 4D array of image
@@ -79,14 +82,62 @@ def segment_cellpose(
         # - diameter (default: 30), flow threshold (0.4)
         # - batch size (224x224 patches to run simultaneously
         # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
+
         masks, flows, styles, diameters = model.eval(x=[img], batch_size=16, channels=[0, 0], net_avg=net_avg,
-                                                     diameter=diameter, do_3D=do_3d, progress=True)
+                                                     diameter=diameter_, do_3D=do_3d, progress=True)
 
     return build_cellpose_mask_outlines(masks)
 
 
 def build_cellpose_mask_outlines(masks):
-    return outlines_list(masks[0], multiprocessing=False)
+    masks_outline = outlines_list(masks[0], multiprocessing=False)
+    for i, mask in enumerate(masks_outline):
+        masks_outline[i] = mask.T
+    return masks_outline
+
+
+def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Optional[int],
+                         save_masks: bool = True):
+
+    img = src_utils.load_image(path_replicate_, img_type=img_type_, level_=0)
+    patch, boundaries = src_utils.image_patch(img, square_size_=square_size_)
+
+    model_version_ = ["cyto", "cyto2", "nuclei"]
+    diameter_ = [7, 15, 30]
+    comb = product(model_version_, diameter_)
+
+    fig, axs = plt.subplots(nrows=3, ncols=3, figsize=(30, 30))
+    [ax.axis("off") for ax in axs.ravel()]
+
+    if square_size is not None:
+        [ax.imshow(patch) for ax in axs.ravel()]
+    else:  # small region to plot
+        og = (patch.shape[0]//2 - 400, patch.shape[0]//2 + 400)
+        [ax.imshow(patch[og[0]:og[1], og[0]:og[1]]) for ax in axs.ravel()]
+
+    for ax, (model_, diameter_) in zip(axs.ravel(), comb):
+        masks_cellpose = segment_cellpose(patch, model_type_=model_, do_3d=False, diameter_=diameter_)
+
+        if save_masks:
+            masks_dir = RESULTS / "masks"
+            os.makedirs(masks_dir, exist_ok=True)
+
+            with open(masks_dir / f"masks_{model_version_}-diameter{diameter_}"
+                                  f"_{img_type_}-{square_size}.pkl", 'wb') as file:
+                pickle.dump(masks_cellpose, file)
+
+        ax.set_title(f"Model: {model_}, Diam: {diameter_}")
+        for mask in masks_cellpose:
+            if square_size is not None or (square_size is None and
+                                           ((og[0] < mask[0, :].max() < og[1]) or
+                                            (og[0] < mask[0, :].min() < og[1]) or
+                                            (og[0] < mask[1, :].max() < og[1]) or
+                                            (og[0] < mask[1, :].min() < og[1]))):
+                ax.plot(mask[0, :], mask[1, :], 'r', linewidth=.8)
+
+    plt.tight_layout()
+    plt.savefig(RESULTS / f"cellpose_2d_optimization_{img_type_}_{square_size}.png")
+    plt.close()
 
 
 def run_cellpose_2d(path_replicate: Path, img_type: str = "mip"):
@@ -128,13 +179,13 @@ def run_cellpose_2d(path_replicate: Path, img_type: str = "mip"):
                                                      ]
 
     # Run CellPose with 3 predefined models (nuclei, cyto, cyto2)
-    seg_patch_nuclei = segment_cellpose(patch, model_type="nuclei")
+    seg_patch_nuclei = segment_cellpose(patch, model_type_="nuclei")
     seg_patch_nuclei_outlines = outlines_list(seg_patch_nuclei, multiprocessing=False)
 
-    seg_patch_cyto = segment_cellpose(patch, model_type="cyto")
+    seg_patch_cyto = segment_cellpose(patch, model_type_="cyto")
     seg_patch_cyto_outlines = outlines_list(seg_patch_cyto, multiprocessing=False)
 
-    seg_patch_cyto2 = segment_cellpose(patch, model_type="cyto2")
+    seg_patch_cyto2 = segment_cellpose(patch, model_type_="cyto2")
     seg_patch_cyto2_outlines = outlines_list(seg_patch_cyto2, multiprocessing=False)
 
     seg_patch_comb = segment_cellpose(patch, net_avg=True)
@@ -191,8 +242,8 @@ def run_cellpose_2d(path_replicate: Path, img_type: str = "mip"):
 
 def run_cellpose_3d(path_replicate_: Path, level_: int = 0, diameter_: int = 10):
 
-    img = load_image(path_replicate_, img_type="stack", level_=level_)
-    patch, boundaries = image_patch(img, square_size=700)
+    img = src_utils.load_image(path_replicate_, img_type="stack", level_=level_)
+    patch, boundaries = src_utils.image_patch(img, square_size_=700)
 
     fig, axs = plt.subplots(3, 4)
 
@@ -207,7 +258,7 @@ def run_cellpose_3d(path_replicate_: Path, level_: int = 0, diameter_: int = 10)
     print("Segmenting the whole image")
 
     if not os.path.isfile(RESULTS_3D / "mask_outline.pkl"):
-        seg_3d = segment_cellpose(img, do_3d=True, diameter=diameter_)
+        seg_3d = segment_cellpose(img, do_3d=True, diameter_=diameter_)
         with open(RESULTS_3D / f"mask_level{level_}_diameter{diameter_}.pkl", "wb") as file:
             pickle.dump(seg_3d, file)
         seg_3d_outlines = outlines_list(seg_3d, multiprocessing=False)
@@ -289,7 +340,7 @@ def transcripts_assignments(masks: np.ndarray, adata, save_path: str, qv_cutoff:
 
 def build_results_dir():
     global RESULTS
-    RESULTS = Path("../../scratch/lbrunsch/results/nucleus_segmentation/cellpose")
+    RESULTS = Path("../../../scratch/lbrunsch/results/nucleus_segmentation/cellpose")
     os.makedirs(RESULTS, exist_ok=True)
     global RESULTS_3D
     RESULTS_3D = RESULTS / "3d_segmentation"
@@ -298,19 +349,62 @@ def build_results_dir():
 
 if __name__ == "__main__":
 
-    run = "3d"
-
+    # Various set up
+    src_utils.check_cuda()
     build_results_dir()
     init_logger()
 
-    data_path = Path("../../scratch/lbrunsch/data")
+    # Run Parameters
+    run = "2D"  # alternative: 3D or Patch
+    square_size = 1000
+    optimize = True
+
+    # Path
+    data_path = Path("../../../scratch/lbrunsch/data")
     path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
 
-    if run == "2d":
-        print("Running 2D Segmentation Algorithm on Nuclei")
-        img_type = "mip"
-        run_cellpose_2d(path_replicate_1, img_type)
-    elif run == "3d":
-        level = 4
-        run_cellpose_3d(path_replicate_1, level, diameter_=10)
+    if run == "2D":
+
+        # Model Version
+        model_type = ""
+
+        # Image Type
+        image_type = "mip"  # alternative: focus, mip
+        level = 0
+
+        if optimize:
+            print("Running 2D Optimization on Nuclei")
+            optimize_cellpose_2d(path_replicate_1, image_type, square_size_=square_size)
+
+    #     else:
+    #
+    #         # Model Parameters
+    #         model_version = "cyto2"
+    #         diameter = 12
+    #
+    #         # Run CellPose at one location and compare to Xenium
+    #         run_cellpose_2d(path_replicate_1, image_type, square_size=square_size_, diameter=diameter)
+    #
+    #         # Run CellPose at various locations
+    #         run_cellpose_location_2d(path_replicate_1, model_type, image_type,
+    #                                  prob_thrsh=prob_threshold, nms_thrsh=nms_threshold, square_size=square_size_)
+    #
+    # # Run stardist with various patch size
+    # elif run == "patch":
+    #     StarDist2D.from_pretrained()
+    #
+    #     # Image Type
+    #     image_type = "mip"  # alternative: focus, mip
+    #
+    #     # Model Parameters
+    #     model_type = "2D_versatile_fluo"  # alternative: 2D_versatile_fluo, 2D_paper_dsb2018, 2D_versatile_he, 2D_demo
+    #     prob_threshold = None
+    #     nms_threshold = None
+    #
+    #     run_patch_cellpose_2d(path_replicate_1, model_type, image_type, nms_threshold, prob_threshold)
+    #
+    # # Run Stardist in 3D (needs some work)
+    # elif run == "3D":
+    #     level = 0
+    #     run_cellpose_3d(path_replicate_1, level_=level)
 

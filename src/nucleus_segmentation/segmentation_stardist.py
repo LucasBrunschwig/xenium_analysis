@@ -1,3 +1,5 @@
+# TODO: In optimization compute nms once and apply threshold for prob manually
+
 # Std
 import os
 import pickle
@@ -13,20 +15,23 @@ from stardist.models import StarDist2D, StarDist3D
 from csbdeep.utils import normalize
 from itertools import product
 
-import sys
-
-sys.path.append("..")
-sys.path.append("../..")
-
-from .. import utils as src_utils
-from . import utils as segmentation_utils
-
 
 if platform.system() != "Windows":
     import resource
+    import sys
+
     # Set the maximum memory usage in bytes (300GB) = limits of memory resources from RCP cluster
     max_memory = int(3e12)
     resource.setrlimit(resource.RLIMIT_AS, (max_memory, max_memory))
+
+    sys.path.append("..")
+    sys.path.append("../..")
+
+    from .. import utils as src_utils
+    from . import utils as segmentation_utils
+else:
+    import utils as segmentation_utils
+    import src.utils as src_utils
 
 RESULTS = Path()
 RESULTS_3D = Path()
@@ -68,7 +73,9 @@ def segment_stardist(
         model = StarDist2D.from_pretrained(model_type_)
         # normalizer (perform normalization), sparse (aggregation),
         # prob_thresh, nms_thresh (non-maximum suppression), scale (factor), n_tiles (broken up in overlay)
-        labels, details = model.predict_instances(normalize(img), prob_thresh=prob_thrsh, nms_thresh=nms_thrsh, n_tiles=(2, 2))
+        img_normalized = normalize(img, 1, 99.8, axis=(0, 1))
+        labels, details = model.predict_instances(img_normalized, prob_thresh=prob_thrsh, nms_thresh=nms_thrsh,
+                                                  n_tiles=(2, 2))
         coord = details["coord"]
     else:
         model = StarDist3D.from_pretrained(model_type_)
@@ -145,7 +152,7 @@ def run_patch_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: 
     segmentation_type = "stardist"
 
     segmentation_utils.run_patch_segmentation_2d(path_replicate_, image_type_, segmentation_type, model_args, RESULTS,
-                              segment_stardist)
+                                                 segment_stardist)
 
 
 def run_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: str, level_: int = 0,
@@ -154,8 +161,8 @@ def run_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: str, l
 
     model_args = {"nms_thrsh": nms_thrsh, "prob_thrsh": prob_thrsh, "model_type_": model_type_}
     segmentation_type = "stardist"
-    segmentation_utils.run_segmentation_2d(path_replicate_, segmentation_type, image_type_, model_args, segment_stardist, level_,
-                        square_size, RESULTS)
+    segmentation_utils.run_segmentation_2d(path_replicate_, segmentation_type, image_type_, model_args,
+                                           segment_stardist, level_, square_size, RESULTS)
 
 
 def run_stardist_location_2d(path_replicate_: Path, model_type_: str, image_type_: str,
@@ -165,7 +172,7 @@ def run_stardist_location_2d(path_replicate_: Path, model_type_: str, image_type
     model_args = {"nms_thrsh": nms_thrsh, "prob_thrsh": prob_thrsh, "model_type_": model_type_}
     segmentation_type = "stardist"
     segmentation_utils.run_segmentation_location_2d(path_replicate_, segmentation_type, image_type_, segment_stardist,
-                                 square_size, model_args, RESULTS)
+                                                    square_size, model_args, RESULTS)
 
 
 def run_stardist_3d(path_replicate_: Path, model_type_: str, level_: int = 0, diameter_: int = 10):
@@ -211,7 +218,7 @@ def run_stardist_3d(path_replicate_: Path, model_type_: str, level_: int = 0, di
 
 def build_results_dir():
     global RESULTS
-    RESULTS = Path("../scratch/lbrunsch/results/nucleus_segmentation/stardist")
+    RESULTS = Path("../../../scratch/lbrunsch/results/nucleus_segmentation/stardist")
     os.makedirs(RESULTS, exist_ok=True)
     global RESULTS_3D
     RESULTS_3D = RESULTS / "3d_seg"
@@ -227,11 +234,11 @@ if __name__ == "__main__":
 
     # Run Parameters
     run = "2D"  # alternative: 3D or Patch
-    square_size_ = None
+    square_size_ = 1000
     optimize = True
 
     # Path
-    data_path = Path("../scratch/lbrunsch/data")
+    data_path = Path("../../../scratch/lbrunsch/data")
     path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
 
     if run == "2D":
