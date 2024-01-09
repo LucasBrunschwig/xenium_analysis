@@ -9,13 +9,12 @@ import numpy as np
 import torch
 import logging
 import platform
-from itertools import product
 from cellpose.utils import outlines_list
 import squidpy as sq
 from squidpy.im import ImageContainer
 
 # Relative import
-from utils import load_image, image_patch, load_xenium_data
+from src.utils import load_image, image_patch, load_xenium_data
 
 
 if platform.system() != "Windows":
@@ -67,22 +66,11 @@ def get_xenium_nucleus_boundaries(path_replicate_: Path, boundaries):
     return masks
 
 
-def segment_stardist(
-
-):
-    pass
-
-
-def segment_cellpose(
-
-):
-    pass
-
-
 def segment_watershed(
         img: np.ndarray,
         do_3d: bool = False,
-) -> tuple:
+        **kwargs,
+):
     """Run cellpose and get masks
 
     Parameters
@@ -108,33 +96,7 @@ def segment_watershed(
     else:
         pass
 
-    return outlines_list(img.data.segmented_watershed.data[:, :, 0, 0], multiprocessing=False)
-
-
-# def optimize_watershed_2d(path_replicate_: Path, model_type_: str, image_type_: str, square_size: int):
-#
-#     img = load_image(path_replicate_, img_type=image_type_)
-#     patch, boundaries = image_patch(img, square_size=square_size)
-#
-#     fig, axs = plt.subplots(nrows=4, ncols=4, figsize=(40, 40))
-#     [ax.axis("off") for ax in axs.ravel()]
-#     [ax.imshow(patch) for ax in axs.ravel()]
-#
-#     # default 2D prob = 0.479, nms threshold = 0.3
-#     prob_thresh = [0.3, 0.4, 0.5, 0.7]
-#     nms_thresh = [0.1, 0.3, 0.5, 0.7]
-#     comb = product(prob_thresh, nms_thresh)
-#     for ax, (prob, nms) in zip(axs.ravel(), comb):
-#         labels, masks_stardist = segment_stardist(patch, model_type_=model_type_, do_3d=False,
-#                                                   prob_thrsh=prob, nms_thrsh=nms)
-#         ax.set_title(f"Prob: {prob}, Nms: {nms}")
-#         for mask in masks_stardist:
-#             closed_contour = np.concatenate((mask, mask[:, 0].reshape((2, 1))), axis=1)
-#             ax.plot(closed_contour[1, :], closed_contour[0, :], 'r', linewidth=.8)
-#
-#     plt.tight_layout()
-#     plt.savefig(RESULTS / f"stardist_2d_optimization_{image_type_}_{model_type_}_{square_size}.png")
-#     plt.close()
+    return build_watershed_mask_outlines(img.data.segmented_watershed.data[:, :, 0, 0])
 
 
 def run_patch_watershed_2d(path_replicate_: Path, image_type_: str, level_: int = 0):
@@ -150,7 +112,7 @@ def run_patch_watershed_2d(path_replicate_: Path, image_type_: str, level_: int 
     [ax.imshow(patch) for ax in axs.ravel()]
 
     for ax, size in zip(axs.ravel(), square_sizes):
-        patch, boundaries = image_patch(img, square_size=size)
+        patch, boundaries = image_patch(img, square_size_=size)
 
         labels, masks_stardist = segment_watershed(patch, do_3d=False)
 
@@ -174,10 +136,21 @@ def run_patch_watershed_2d(path_replicate_: Path, image_type_: str, level_: int 
     plt.close()
 
 
+def build_watershed_mask_outlines(masks):
+    mask_outlines = []
+    masks = outlines_list(masks, multiprocessing=False)
+    for mask in masks:
+        if mask.shape[0] > 0:
+            mask = np.array(mask).T
+            mask_outlines.append(np.concatenate((mask, mask[:, 0].reshape((2, 1))), axis=1))
+
+    return mask_outlines
+
+
 def run_watershed_2d(path_replicate_: Path, image_type_: str, level_: int = 0, square_size: int = 400):
 
     img = load_image(path_replicate_, img_type=image_type_, level_=level_)
-    patch, boundaries = image_patch(img, square_size=square_size)
+    patch, boundaries = image_patch(img, square_size_=square_size)
 
     masks_watershed = segment_watershed(patch, do_3d=False)
 

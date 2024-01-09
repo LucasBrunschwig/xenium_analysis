@@ -5,14 +5,15 @@ import shutil
 import zipfile
 import re
 
-import anndata
 # third party
+import anndata
 import scanpy as sc
 import pandas as pd
 import gzip
 import squidpy as sq
 import numpy as np
 import tifffile
+import torch
 
 
 def decompress(path_file, extension='gz'):
@@ -168,7 +169,7 @@ def load_xenium_data(path: Path, formatted: bool = True):
         raise ValueError("Formatted Expect a '.h5ad' file path")
 
     # ##############################################################
-    # Deprecated
+    # Deprecated Version
     # # Load h5 file for transcriptomics matrix data
     # adata = sc.read_10x_h5(os.path.join(path, "cell_feature_matrix.h5"))
     #
@@ -215,7 +216,9 @@ def load_rna_seq_data(path):
 def preprocess_transcriptomics(adata, filter_: bool = True):
     """Perform normalization on transcriptomics data obtained through xenium
 
-        (1) Normalize total (2) log(X+1)
+        (Opt) Filtering min counts, min cells (1) Normalize total (2) log(X+1)
+
+        Remark: in some cases you do not want the preprocessing to drop data points (set filter_ = False)
     """
 
     # Filter adata by number of counts per cell and number of gene abundance across cells
@@ -268,52 +271,65 @@ def load_image(path_replicate: Path, img_type: str, level_: int = 0):
     return image
 
 
-def image_patch(img_array, square_size: int = 400, format_: str = "test", orig: tuple = None):
+def image_patch(img_array_, square_size_: int = 400, format_: str = "test", orig_: tuple = None):
     """
 
     Parameters
     ----------
-    img_array
-    square_size: the length of the image square
+    img_array_: 2- or 3-dimensional array
+    square_size_: the length of the image square
     format_: "test" returns one square patch at the image center (width = square size)
              "training": returns a list of patches adapting the square size to match the image size
-    orig: choose the origin of the square
+    orig_: choose the origin of the square expected [x, y] or [z, y, x]
 
     Returns
     -------
     returns: list of patches or one patch as np.ndarray
+
     """
 
-    if square_size is None:
-        return [img_array, [[0, img_array.shape[0]], [0, img_array.shape[1]]]]
-
-    if orig is None:
-        if len(img_array.shape) == 2:
-            coord_1, coord_2 = 0, 1
+    # if patch is false return the original image with its boundaries
+    if square_size_ is None:
+        if len(img_array_.shape) == 2:
+            return [img_array_, [[0, img_array_.shape[0]], [0, img_array_.shape[1]]]]
         else:
-            coord_1, coord_2 = 1, 2
+            return [img_array_, [[0, img_array_.shape[0]], [0, img_array_.shape[1]], [0, img_array_.shape[2]]]]
 
-        l_t = img_array.shape[coord_1] // 2 - square_size // 2
-        r_t = img_array.shape[coord_1] // 2 + square_size // 2
-        l_b = img_array.shape[coord_2] // 2 - square_size // 2
-        r_b = img_array.shape[coord_2] // 2 + square_size // 2
+    if len(img_array_.shape) == 2:
+        coord_1, coord_2 = 0, 1
     else:
-        l_t = orig[0]
-        r_t = orig[0] + square_size
-        l_b = orig[1]
-        r_b = orig[1] + square_size
+        coord_1, coord_2 = 1, 2
+
+    # if no coordinates take the center
+    if orig_ is None:
+
+        l_t = img_array_.shape[coord_1] // 2 - square_size_ // 2
+        r_t = img_array_.shape[coord_1] // 2 + square_size_ // 2
+        l_b = img_array_.shape[coord_2] // 2 - square_size_ // 2
+        r_b = img_array_.shape[coord_2] // 2 + square_size_ // 2
+    # use specified coordinates
+    else:
+        l_t = orig_[coord_1]
+        r_t = orig_[coord_1] + square_size_
+        l_b = orig_[coord_2]
+        r_b = orig_[coord_2] + square_size_
 
     if format_ == "test":
-        if len(img_array.shape) == 2:
-            return [img_array[l_t:r_t,l_b:r_b],
+        if len(img_array_.shape) == 2:
+            return [img_array_[l_t:r_t,l_b:r_b],
                     ([l_t, r_t], [l_b, r_b])]
         else:
-            return [img_array[:, l_t:r_t, l_b:r_b],
-                    ([0, l_t, r_t], [img_array.shape[0], l_b, r_b])]
-    elif format_ == "whole-image":
-        return [img_array, [[0, img_array.shape[0]], [0, img_array.shape[1]]]]
+            return [img_array_[:, l_t:r_t, l_b:r_b],
+                    ([0, l_t, r_t], [img_array_.shape[0], l_b, r_b])]
+    elif format_ == "train":
+        raise ValueError("Not implemented yet")
+
+
+def check_cuda():
+    if torch.cuda.is_available():
+        print("GPU available", torch.cuda.current_device())
     else:
-        raise NotImplementedError(f" {format_} not implemented yet")
+        print("No GPU available")
 
 
 if __name__ == "__main__":

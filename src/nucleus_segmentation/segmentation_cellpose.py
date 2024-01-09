@@ -14,9 +14,10 @@ import torch
 import logging
 
 # Relative import
-from utils import load_xenium_data
+from src.utils import load_xenium_data, load_image, image_patch
 
 import platform
+
 
 if platform.system() != "Windows":
     import resource
@@ -26,11 +27,6 @@ if platform.system() != "Windows":
 
 RESULTS = Path()
 RESULTS_3D = Path()
-
-if torch.cuda.is_available():
-    print("GPU available", torch.cuda.current_device())
-else:
-    print("No GPU available")
 
 
 def init_logger():
@@ -45,6 +41,7 @@ def segment_cellpose(
         net_avg: bool = False,
         do_3d: bool = False,
         diameter: int = 30,
+        **kwargs
 ) -> np.ndarray:
     """Run cellpose and get masks
 
@@ -67,7 +64,7 @@ def segment_cellpose(
 
     if do_3d:
         # fast_mode, use_anisotropy, iou_depth, iou_threshold
-        masks = segment(img, channels=[0, 0], model_type=model_type,diameter=diameter)
+        masks = segment(img, channels=[0, 0], model_type=model_type, diameter=diameter)
 
     else:
         # Eval model
@@ -83,80 +80,13 @@ def segment_cellpose(
         # - batch size (224x224 patches to run simultaneously
         # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
         masks, flows, styles, diameters = model.eval(x=[img], batch_size=16, channels=[0, 0], net_avg=net_avg,
-                                                     diameter=diameter, do_3D=do_3d, z_axis=0, progress=True)
+                                                     diameter=diameter, do_3D=do_3d, progress=True)
 
-    return masks
-
-
-def image_patch(img_array, square_size: int = 400, format_: str = "test"):
-    """
-
-    Parameters
-    ----------
-    img_array
-    square_size: the length of the image square
-    format_: "test" returns one square patch at the image center (width = square size)
-             "training": returns a list of patches adapting the square size to match the image size
-
-    Returns
-    -------
-    returns: list of patches or one patch as np.ndarray
-    """
-
-    if len(img_array.shape) == 2:
-        coord_1, coord_2 = 0, 1
-    else:
-        coord_1, coord_2 = 1, 2
-
-    l_t = img_array.shape[coord_1] // 2 - square_size // 2
-    r_t = img_array.shape[coord_1] // 2 + square_size // 2
-    l_b = img_array.shape[coord_2] // 2 - square_size // 2
-    r_b = img_array.shape[coord_2] // 2 + square_size // 2
-
-    if format_ == "test":
-        if len(img_array.shape) == 2:
-            return [img_array[l_t:r_t,l_b:r_b],
-                    ([l_t, r_t], [l_b, r_b])]
-        else:
-            return [img_array[:, l_t:r_t, l_b:r_b],
-                    ([0, l_t, r_t], [img_array.shape[0], l_b, r_b])]
-    elif format_ == "whole-image":
-        return [img_array, [[0, img_array.shape[0]], [0, img_array.shape[1]]]]
-    else:
-        raise NotImplementedError(f" {format_} not implemented yet")
+    return build_cellpose_mask_outlines(masks)
 
 
-def load_image(path_replicate: Path, img_type: str, level_: int = 0):
-    if img_type == "mip":
-        img_file = str(path_replicate / "morphology_mip.ome.tif")
-    elif img_type == "focus":
-        img_file = str(path_replicate / "morphology_focus.ome.tif")
-    elif img_type == "stack":
-        img_file = str(path_replicate / f"level_{level_}_morphology.ome.tif")
-
-        # if os.path.isfile(img_file):
-        #     image = tifffile.imread(img_file)
-        # else:
-        img_file_og = str(path_replicate / "morphology.ome.tif")
-        with tifffile.TiffFile(img_file_og) as tif:
-             image = tif.series[0].levels[level_].asarray()
-        #     tifffile.imwrite(
-        #         img_file,
-        #         image,
-        #         photometric='minisblack',
-        #         dtype='uint16',
-        #         tile=(1024, 1024),
-        #         compression='JPEG_2000_LOSSY',
-        #         metadata={'axes': 'ZYX'},
-        #     )
-        print("Image shape:", image.shape)
-        return image
-    else:
-        raise ValueError("Not a type of image")
-
-    image = tifffile.imread(img_file)
-    print("Image shape:", image.shape)
-    return image
+def build_cellpose_mask_outlines(masks):
+    return outlines_list(masks[0], multiprocessing=False)
 
 
 def run_cellpose_2d(path_replicate: Path, img_type: str = "mip"):
@@ -176,7 +106,7 @@ def run_cellpose_2d(path_replicate: Path, img_type: str = "mip"):
     img = load_image(path_replicate, img_type)
 
     # Returns a test patch with the image boundaries
-    patch, boundaries = image_patch(img, square_size=700, format_="test")
+    patch, boundaries = image_patch(img, square_size_=700, format_="test")
 
     adata = load_xenium_data(Path(str(path_replicate) + ".h5ad"))
 
