@@ -21,7 +21,7 @@ directory = path.path(__file__).abspath()
 # setting path
 sys.path.append(directory.parent.parent)
 
-from .. import utils as src_utils
+from src import utils as src_utils
 from . import utils as segmentation_utils
 
 
