@@ -1,7 +1,6 @@
 # Std
 import os
 import pickle
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -14,7 +13,7 @@ from stardist.models import StarDist2D, StarDist3D
 from csbdeep.utils import normalize
 from itertools import product
 
-from .. import utils as utils_src
+from ..utils import load_image, image_patch, check_cuda
 from utils import run_segmentation_2d, run_patch_segmentation_2d, run_segmentation_location_2d
 
 
@@ -49,12 +48,17 @@ def segment_stardist(
     img: Can be list of 2D/3D images, or array of 2D/3D images, or 4D image array
     model_type_: pretrained models 2D_versatile_fluo / 2D_paper_dsb2018, 2D_versatile_he
     do_3d: perform 3D nuclear segmentation requires 3D array
+    nms_thrsh: parameter non-maxima suppression threshold
+    prob_thrsh: parameter probability threshold
 
     Returns
     -------
     np.ndarray
         labelled image, where 0 = no masks; 1, 2, ... = mask labels
     """
+    if kwargs:
+        raise ValueError("Kwargs should be empty, unexpected parameters:", kwargs)
+
     if not do_3d:
         model = StarDist2D.from_pretrained(model_type_)
         # normalizer (perform normalization), sparse (aggregation),
@@ -86,8 +90,8 @@ def build_stardist_mask_outlines(masks):
 def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: str, square_size: Optional[int],
                          level_: int, save_masks: bool = True):
 
-    img = utils_src.load_image(path_replicate_, img_type=image_type_, level_=level_)
-    patch, boundaries = utils_src.image_patch(img, square_size_=square_size)
+    img = load_image(path_replicate_, img_type=image_type_, level_=level_)
+    patch, boundaries = image_patch(img, square_size_=square_size)
 
     fig, axs = plt.subplots(nrows=4, ncols=4, figsize=(40, 40))
     [ax.axis("off") for ax in axs.ravel()]
@@ -161,8 +165,8 @@ def run_stardist_location_2d(path_replicate_: Path, model_type_: str, image_type
 
 def run_stardist_3d(path_replicate_: Path, model_type_: str, level_: int = 0, diameter_: int = 10):
 
-    img = utils_src.load_image(path_replicate_, img_type="stack", level_=level_)
-    patch, boundaries = utils_src.image_patch(img, square_size_=700)
+    img = load_image(path_replicate_, img_type="stack", level_=level_)
+    patch, boundaries = image_patch(img, square_size_=700)
 
     fig, axs = plt.subplots(3, 4)
 
@@ -212,7 +216,7 @@ def build_results_dir():
 if __name__ == "__main__":
 
     # Various set up
-    utils_src.check_cuda()
+    check_cuda()
     build_results_dir()
     init_logger()
 
@@ -271,5 +275,3 @@ if __name__ == "__main__":
         StarDist3D.from_pretrained()
         model_type = "3D_demo"
         run_stardist_3d(path_replicate_1, level_=level, model_type_=model_type)
-
-
