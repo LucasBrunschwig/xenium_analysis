@@ -1,6 +1,7 @@
 # Std
 import os
 import pickle
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -13,8 +14,16 @@ from stardist.models import StarDist2D, StarDist3D
 from csbdeep.utils import normalize
 from itertools import product
 
+
+# Get the current script's directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Add the parent directory to the Python path
+parent_dir = os.path.abspath(os.path.join(script_dir, '..'))
+sys.path.append(parent_dir)
+
 # Relative import
-from ..utils import load_image, image_patch, check_cuda
+from src.utils import load_image, image_patch, check_cuda
 from utils import run_segmentation_2d, run_patch_segmentation_2d, run_segmentation_location_2d
 
 
