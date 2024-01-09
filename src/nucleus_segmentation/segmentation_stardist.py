@@ -25,7 +25,7 @@ from . import utils as segmentation_utils
 if platform.system() != "Windows":
     import resource
     # Set the maximum memory usage in bytes (300GB) = limits of memory resources from RCP cluster
-    max_memory = int(3e11)
+    max_memory = int(3e12)
     resource.setrlimit(resource.RLIMIT_AS, (max_memory, max_memory))
 
 RESULTS = Path()
