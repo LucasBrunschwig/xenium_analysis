@@ -91,11 +91,13 @@ def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: s
 
     fig, axs = plt.subplots(nrows=4, ncols=4, figsize=(40, 40))
     [ax.axis("off") for ax in axs.ravel()]
+
     if square_size is not None:
         [ax.imshow(patch) for ax in axs.ravel()]
-    else: # small region to plot
+    else:  # small region to plot
         og = (patch.shape[0]//2 - 400, patch.shape[0]//2 + 400)
         [ax.imshow(patch[og[0]:og[1], og[0]:og[1]]) for ax in axs.ravel()]
+
     # default 2D prob = 0.479, nms threshold = 0.3
     prob_thresh = [0.3, 0.4, 0.5, 0.7]
     nms_thresh = [0.1, 0.3, 0.5, 0.7]
@@ -115,10 +117,10 @@ def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: s
         ax.set_title(f"Prob: {prob}, Nms: {nms}")
         for mask in masks_stardist:
             if square_size is not None or (square_size is None and
-                                           (og[0] < mask[0, :].max() < og[1]) or
-                                           (og[0] < mask[0, :].min() < og[1]) or
-                                           (og[0] < mask[1, :].max() < og[1]) or
-                                           (og[0] < mask[1, :].min() < og[1])):
+                                           ((og[0] < mask[0, :].max() < og[1]) or
+                                            (og[0] < mask[0, :].min() < og[1]) or
+                                            (og[0] < mask[1, :].max() < og[1]) or
+                                            (og[0] < mask[1, :].min() < og[1]))):
 
                 ax.plot(mask[0, :], mask[1, :], 'r', linewidth=.8)
 
@@ -216,7 +218,7 @@ if __name__ == "__main__":
 
     # Run Parameters
     run = "2D"  # alternative: 3D or Patch
-    square_size_ = 700
+    square_size_ = None
     optimize = True
 
     # Path
