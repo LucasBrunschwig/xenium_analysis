@@ -13,8 +13,8 @@ from stardist.models import StarDist2D, StarDist3D
 from csbdeep.utils import normalize
 from itertools import product
 
-import utils as segmentation_utils
 from .. import utils as src_utils
+from . import utils as segmentation_utils
 
 
 if platform.system() != "Windows":
