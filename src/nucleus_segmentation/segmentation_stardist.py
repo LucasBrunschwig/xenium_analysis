@@ -68,7 +68,7 @@ def segment_stardist(
         model = StarDist2D.from_pretrained(model_type_)
         # normalizer (perform normalization), sparse (aggregation),
         # prob_thresh, nms_thresh (non-maximum suppression), scale (factor), n_tiles (broken up in overlay)
-        labels, details = model.predict_instances(normalize(img), prob_thresh=prob_thrsh, nms_thresh=nms_thrsh, n_tiles=(4,))
+        labels, details = model.predict_instances(normalize(img), prob_thresh=prob_thrsh, nms_thresh=nms_thrsh, n_tiles=(2, 2))
         coord = details["coord"]
     else:
         model = StarDist3D.from_pretrained(model_type_)
