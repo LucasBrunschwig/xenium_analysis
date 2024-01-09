@@ -3,12 +3,12 @@ from typing import Callable
 
 import matplotlib.pyplot as plt
 
-from src.utils import load_image, load_xenium_data, image_patch
+from .. import utils as src_utils
 
 
 def get_xenium_nucleus_boundaries(path_replicate_: Path, boundaries: list = None):
 
-    adata = load_xenium_data(Path(str(path_replicate_) + ".h5ad"))
+    adata = src_utils.load_xenium_data(Path(str(path_replicate_) + ".h5ad"))
 
     # Convert xenium predefined nucleus boundaries to pixels locations
     # (x,y): vertex_x is the horizontal axis / vertex y is the vertical axis
@@ -41,8 +41,8 @@ def get_xenium_nucleus_boundaries(path_replicate_: Path, boundaries: list = None
 def run_segmentation_2d(path_replicate_: Path, model_type_: str, image_type_: str, model_args: dict, segment_fct: Callable,
                         level_: int = 0, square_size: int = 400, results_dir: Path = Path()):
 
-    img = load_image(path_replicate_, img_type=image_type_, level_=level_)
-    patch, boundaries = image_patch(img, square_size_=square_size)
+    img = src_utils.load_image(path_replicate_, img_type=image_type_, level_=level_)
+    patch, boundaries = src_utils.image_patch(img, square_size_=square_size)
 
     fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(30, 10))
     [ax.axis("off") for ax in axs]
@@ -79,7 +79,7 @@ def run_segmentation_2d(path_replicate_: Path, model_type_: str, image_type_: st
 def run_patch_segmentation_2d(path_replicate_: Path, image_type_: str, model_type_: str, model_args: dict,
                               results_dir: Path, segment_fct: Callable):
 
-    img = load_image(path_replicate_, img_type=image_type_)
+    img = src_utils.load_image(path_replicate_, img_type=image_type_)
 
     fig, axs = plt.subplots(nrows=2, ncols=4, figsize=(30, 30))
     [ax.axis("off") for ax in axs.ravel()]
@@ -90,7 +90,7 @@ def run_patch_segmentation_2d(path_replicate_: Path, image_type_: str, model_typ
 
     for ax, size in zip(axs.ravel(), square_sizes):
 
-        patch, boundaries = image_patch(img, square_size_=size)
+        patch, boundaries = src_utils.image_patch(img, square_size_=size)
         ax.imshow(patch)
 
         masks = segment_fct(patch, do_3d=False, **model_args)
@@ -129,7 +129,7 @@ def run_patch_segmentation_2d(path_replicate_: Path, image_type_: str, model_typ
 def run_segmentation_location_2d(path_replicate_: Path, segment_type_: str, image_type_: str, segment_fct: Callable,
                                  square_size: int = 400, model_args: dict = {}, results_dir: Path = Path()):
 
-    img = load_image(path_replicate_, img_type=image_type_, level_=0)
+    img = src_utils.load_image(path_replicate_, img_type=image_type_, level_=0)
 
     fig, axs = plt.subplots(nrows=3, ncols=3, figsize=(15, 15))
     [ax.axis("off") for ax in axs.ravel()]
@@ -145,7 +145,7 @@ def run_segmentation_location_2d(path_replicate_: Path, segment_type_: str, imag
         model_version = model_args["model_type"]
 
     for i, ax in enumerate(axs.ravel()):
-        patch, boundaries = image_patch(img, square_size_=square_size, orig_=square_origin[i])
+        patch, boundaries = src_utils.image_patch(img, square_size_=square_size, orig_=square_origin[i])
         ax.imshow(patch)
         ax.set_title(f"Patch ({square_origin[i][0]},{square_origin[i][1]})")
         masks = segment_fct(patch, do_3d=False, **model_args)

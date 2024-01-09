@@ -13,8 +13,8 @@ from stardist.models import StarDist2D, StarDist3D
 from csbdeep.utils import normalize
 from itertools import product
 
-from src.utils import load_image, image_patch, check_cuda
-from utils import run_segmentation_2d, run_patch_segmentation_2d, run_segmentation_location_2d
+from . import utils as segmentation_utils
+from .. import utils as src_utils
 
 
 if platform.system() != "Windows":
@@ -90,8 +90,8 @@ def build_stardist_mask_outlines(masks):
 def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: str, square_size: Optional[int],
                          level_: int, save_masks: bool = True):
 
-    img = load_image(path_replicate_, img_type=image_type_, level_=level_)
-    patch, boundaries = image_patch(img, square_size_=square_size)
+    img = src_utils.load_image(path_replicate_, img_type=image_type_, level_=level_)
+    patch, boundaries = src_utils.image_patch(img, square_size_=square_size)
 
     fig, axs = plt.subplots(nrows=4, ncols=4, figsize=(40, 40))
     [ax.axis("off") for ax in axs.ravel()]
@@ -139,7 +139,7 @@ def run_patch_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: 
     model_args = {"nms_thrsh": nms_thresh, "prob_thrsh": prob_thresh, "model_type_": model_type_}
     segmentation_type = "stardist"
 
-    run_patch_segmentation_2d(path_replicate_, image_type_, segmentation_type, model_args, RESULTS,
+    segmentation_utils.run_patch_segmentation_2d(path_replicate_, image_type_, segmentation_type, model_args, RESULTS,
                               segment_stardist)
 
 
@@ -149,7 +149,7 @@ def run_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: str, l
 
     model_args = {"nms_thrsh": nms_thrsh, "prob_thrsh": prob_thrsh, "model_type_": model_type_}
     segmentation_type = "stardist"
-    run_segmentation_2d(path_replicate_, segmentation_type, image_type_, model_args, segment_stardist, level_,
+    segmentation_utils.run_segmentation_2d(path_replicate_, segmentation_type, image_type_, model_args, segment_stardist, level_,
                         square_size, RESULTS)
 
 
@@ -159,14 +159,14 @@ def run_stardist_location_2d(path_replicate_: Path, model_type_: str, image_type
 
     model_args = {"nms_thrsh": nms_thrsh, "prob_thrsh": prob_thrsh, "model_type_": model_type_}
     segmentation_type = "stardist"
-    run_segmentation_location_2d(path_replicate_, segmentation_type, image_type_, segment_stardist,
+    segmentation_utils.run_segmentation_location_2d(path_replicate_, segmentation_type, image_type_, segment_stardist,
                                  square_size, model_args, RESULTS)
 
 
 def run_stardist_3d(path_replicate_: Path, model_type_: str, level_: int = 0, diameter_: int = 10):
 
-    img = load_image(path_replicate_, img_type="stack", level_=level_)
-    patch, boundaries = image_patch(img, square_size_=700)
+    img = src_utils.load_image(path_replicate_, img_type="stack", level_=level_)
+    patch, boundaries = src_utils.image_patch(img, square_size_=700)
 
     fig, axs = plt.subplots(3, 4)
 
@@ -216,7 +216,7 @@ def build_results_dir():
 if __name__ == "__main__":
 
     # Various set up
-    check_cuda()
+    src_utils.check_cuda()
     build_results_dir()
     init_logger()
 
