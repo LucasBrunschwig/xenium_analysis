@@ -13,7 +13,7 @@ from stardist.models import StarDist2D, StarDist3D
 from csbdeep.utils import normalize
 from itertools import product
 
-from . import utils as segmentation_utils
+import utils as segmentation_utils
 from .. import utils as src_utils
 
 
