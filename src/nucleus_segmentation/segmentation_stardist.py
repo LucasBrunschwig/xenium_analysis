@@ -82,7 +82,7 @@ def segment_stardist(
         labels, details = model.predict_instances(normalize(img))
         coord = details["points"]
 
-    return build_stardist_mask_outlines(coord)
+    return build_stardist_mask_outlines(coord), details
 
 
 def build_stardist_mask_outlines(masks):
@@ -117,28 +117,33 @@ def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: s
     # default 2D prob = 0.479, nms threshold = 0.3
     prob_thresh = [0.3, 0.4, 0.5, 0.7]
     nms_thresh = [0.1, 0.3, 0.5, 0.7]
-    comb = product(prob_thresh, nms_thresh)
-    for ax, (prob, nms) in zip(axs.ravel(), comb):
-        masks_stardist = segment_stardist(patch, model_type_=model_type_, do_3d=False,
-                                                  prob_thrsh=prob, nms_thrsh=nms)
 
-        if save_masks:
-            masks_dir = RESULTS / "masks"
-            os.makedirs(masks_dir, exist_ok=True)
+    for ax, nms in zip(axs.ravel(), prob_thresh):
+        masks_stardist, details = segment_stardist(patch, model_type_=model_type_, do_3d=False,
+                                                  prob_thrsh=min(prob_thresh), nms_thrsh=nms)
 
-            with open(masks_dir / f"masks_{model_type_}-nms{nms}-prob{prob}"
-                                  f"_{image_type_}-{square_size}.pkl", 'wb') as file:
-                pickle.dump(masks_stardist, file)
+        for prob in prob_thresh:
 
-        ax.set_title(f"Prob: {prob}, Nms: {nms}")
-        for mask in masks_stardist:
-            if square_size is not None or (square_size is None and
-                                           ((og[0] < mask[0, :].max() < og[1]) or
-                                            (og[0] < mask[0, :].min() < og[1]) or
-                                            (og[0] < mask[1, :].max() < og[1]) or
-                                            (og[0] < mask[1, :].min() < og[1]))):
+            if prob != min(prob_thresh):
+                masks_stardist = masks_stardist[0:len(np.where(details["prob"] > prob)[0])]
 
-                ax.plot(mask[0, :], mask[1, :], 'r', linewidth=.8)
+            if save_masks:
+                masks_dir = RESULTS / "masks"
+                os.makedirs(masks_dir, exist_ok=True)
+
+                with open(masks_dir / f"masks_{model_type_}-nms{nms}-prob{prob}"
+                                      f"_{image_type_}-{square_size}.pkl", 'wb') as file:
+                    pickle.dump(masks_stardist, file)
+
+            ax.set_title(f"Prob: {prob}, Nms: {nms}")
+            for mask in masks_stardist:
+                if square_size is not None or (square_size is None and
+                                               ((og[0] < mask[0, :].max() < og[1]) or
+                                                (og[0] < mask[0, :].min() < og[1]) or
+                                                (og[0] < mask[1, :].max() < og[1]) or
+                                                (og[0] < mask[1, :].min() < og[1]))):
+
+                    ax.plot(mask[0, :], mask[1, :], 'r', linewidth=.8)
 
     plt.tight_layout()
     plt.savefig(RESULTS / f"stardist_2d_optimization_{image_type_}_{model_type_}_{square_size}.png")
