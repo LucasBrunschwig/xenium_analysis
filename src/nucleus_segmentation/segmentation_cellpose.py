@@ -21,7 +21,7 @@ if platform.system() != "Windows":
     import sys
 
     # Set the maximum memory usage in bytes (300GB)
-    max_memory = int(3e11)
+    max_memory = int(3e12)
     resource.setrlimit(resource.RLIMIT_AS, (max_memory, max_memory))
 
     sys.path.append("..")
@@ -59,7 +59,6 @@ def segment_cellpose(
 
     Parameters
     ----------
-    distributed_
     img_: Can be list of 2D/3D images, or array of 2D/3D images, or 4D image array
     model_type_: model type to load
     net_avg_: evaluate 1 model or average of 4 built-in models
@@ -136,7 +135,7 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
         [ax.imshow(patch[og[0]:og[1], og[0]:og[1]]) for ax in axs.ravel()]
         distributed_ = True
 
-    distributed_ = True
+    distributed_ = False
 
     for ax, (model_, diameter_) in zip(axs.ravel(), comb):
 
