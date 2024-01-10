@@ -16,11 +16,6 @@ from itertools import product
 import platform
 
 
-# Relative import
-import src.utils as src_utils
-import utils as segmentation_utils
-
-
 if platform.system() != "Windows":
     import resource
     import sys
