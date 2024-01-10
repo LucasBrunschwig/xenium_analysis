@@ -118,11 +118,11 @@ def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: s
     prob_thresh = [0.3, 0.4, 0.5, 0.7]
     nms_thresh = [0.1, 0.3, 0.5, 0.7]
 
-    for ax, nms in zip(axs.ravel(), prob_thresh):
+    for i, nms in enumerate(nms_thresh):
         masks_stardist, details = segment_stardist(patch, model_type_=model_type_, do_3d=False,
                                                   prob_thrsh=min(prob_thresh), nms_thrsh=nms)
 
-        for prob in prob_thresh:
+        for j, prob in enumerate(prob_thresh):
 
             if prob != min(prob_thresh):
                 masks_stardist = masks_stardist[0:len(np.where(details["prob"] > prob)[0])]
@@ -134,6 +134,8 @@ def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: s
                 with open(masks_dir / f"masks_{model_type_}-nms{nms}-prob{prob}"
                                       f"_{image_type_}-{square_size}.pkl", 'wb') as file:
                     pickle.dump(masks_stardist, file)
+
+            ax = axs[i, j]
 
             ax.set_title(f"Prob: {prob}, Nms: {nms}")
             for mask in masks_stardist:
