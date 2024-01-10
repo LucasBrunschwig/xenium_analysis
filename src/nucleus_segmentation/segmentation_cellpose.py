@@ -101,7 +101,7 @@ def segment_cellpose(
             # - batch size (224x224 patches to run simultaneously
             # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
 
-            masks, flows, styles, diameters = model.eval(x=[img_], batch_size=16, channels=[0, 0], net_avg=net_avg_,
+            masks, flows, styles, diameters = model.eval(x=[img_], batch_size=64, channels=[0, 0], net_avg=net_avg_,
                                                          diameter=diameter_, do_3D=do_3d_, progress=True)
 
     return build_cellpose_mask_outlines(masks)
@@ -117,7 +117,9 @@ def build_cellpose_mask_outlines(masks):
 def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Optional[int],
                          save_masks: bool = True):
 
+    print(f"Loading Images: {img_type_} with size {square_size_}")
     img = src_utils.load_image(path_replicate_, img_type=img_type_, level_=0)
+    img = img.astype(np.uint8)
     patch, boundaries = src_utils.image_patch(img, square_size_=square_size_)
 
     model_version_ = ["cyto", "cyto2", "nuclei"]
@@ -135,13 +137,12 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
         [ax.imshow(patch[og[0]:og[1], og[0]:og[1]]) for ax in axs.ravel()]
         distributed_ = True
 
-    distributed_ = False
-
+    print("Start Segmenting")
     for ax, (model_, diameter_) in zip(axs.ravel(), comb):
-
+        print(f"Segment: model-{model_} and diameter-{diameter_}")
         masks_cellpose = segment_cellpose(patch, model_type_=model_, do_3d_=False, diameter_=diameter_,
                                           distributed_=distributed_)
-
+        print(f"Saving Masks")
         if save_masks:
             masks_dir = RESULTS / "masks"
             os.makedirs(masks_dir, exist_ok=True)
@@ -386,7 +387,7 @@ if __name__ == "__main__":
 
     # Run Parameters
     run = "2D"  # alternative: 3D or Patch
-    square_size = None
+    square_size = 5000
     optimize = True
 
     # Path
