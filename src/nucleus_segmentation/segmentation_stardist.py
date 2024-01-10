@@ -246,7 +246,7 @@ if __name__ == "__main__":
 
     # Run Parameters
     run = "2D"  # alternative: 3D or Patch
-    square_size_ = 1000
+    square_size_ = None
     optimize = True
 
     # Path
