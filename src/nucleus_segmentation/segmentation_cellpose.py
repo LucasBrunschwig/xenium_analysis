@@ -130,12 +130,16 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
     [ax.axis("off") for ax in axs.ravel()]
 
     distributed_ = False
+
     if square_size is not None:
         [ax.imshow(patch) for ax in axs.ravel()]
     else:  # small region to plot
         og = (patch.shape[0]//2 - 400, patch.shape[0]//2 + 400)
         [ax.imshow(patch[og[0]:og[1], og[0]:og[1]]) for ax in axs.ravel()]
         distributed_ = True
+
+
+    distributed_ = False
 
     print("Start Segmenting")
     for ax, (model_, diameter_) in zip(axs.ravel(), comb):
