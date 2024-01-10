@@ -31,7 +31,7 @@ def run_predefined_models(path_replicate_: Path, run_: str, square_size_: int, i
     # Step 1: simple segmentation at the center
 
     masks_stardist = segment_stardist(patch, do_3d=do_3d, **model_args_["stardist"])
-    masks_cellpose = segment_cellpose(patch, do_3d=do_3d, **model_args_["cellpose"])
+    masks_cellpose = segment_cellpose(patch, do_3d_=do_3d, distributed_=distributed_, **model_args_["cellpose"])
     masks_watershed = segment_watershed(patch, do_3d=do_3d, **model_args_["watershed"])
 
     fig, axs = plt.subplots(nrows=1, ncols=4, figsize=(30, 10))

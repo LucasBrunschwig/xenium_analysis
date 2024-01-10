@@ -8,24 +8,36 @@ from typing import Optional
 from cellpose import models
 from cellpose.utils import outlines_list
 from cellpose.contrib.distributed_segmentation import segment
+from cellpose.transforms import convert_image
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 import logging
 from itertools import product
+import platform
+
 
 # Relative import
 import src.utils as src_utils
 import utils as segmentation_utils
 
-import platform
-
 
 if platform.system() != "Windows":
     import resource
+    import sys
+
     # Set the maximum memory usage in bytes (300GB)
     max_memory = int(3e11)
     resource.setrlimit(resource.RLIMIT_AS, (max_memory, max_memory))
+
+    sys.path.append("..")
+    sys.path.append("../..")
+
+    from .. import utils as src_utils
+    from . import utils as segmentation_utils
+else:
+    # Relative import
+    import src.utils as src_utils
+    import utils as segmentation_utils
 
 RESULTS = Path()
 RESULTS_3D = Path()
@@ -37,22 +49,26 @@ def init_logger():
     logger.propagate = True
 
 
+
+
 def segment_cellpose(
-        img: np.ndarray,
+        img_: np.ndarray,
         model_type_: str = "nuclei",
-        net_avg: bool = False,
-        do_3d: bool = False,
+        net_avg_: bool = False,
+        do_3d_: bool = False,
         diameter_: int = 30,
+        distributed_: bool = False,
         **kwargs
 ) -> np.ndarray:
     """Run cellpose and get masks
 
     Parameters
     ----------
-    img: Can be list of 2D/3D images, or array of 2D/3D images, or 4D image array
+    distributed_
+    img_: Can be list of 2D/3D images, or array of 2D/3D images, or 4D image array
     model_type_: model type to load
-    net_avg: evaluate 1 model or average of 4 built-in models
-    do_3d: perform 3D nuclear segmentation requires 3D array
+    net_avg_: evaluate 1 model or average of 4 built-in models
+    do_3d_: perform 3D nuclear segmentation requires 3D array
     diameter_: estimated size of nucleus
 
     Returns
@@ -61,30 +77,36 @@ def segment_cellpose(
         labelled image, where 0 = no masks; 1, 2, ... = mask labels
     """
 
-    if do_3d:
+    if do_3d_:
         # fast_mode, use_anisotropy, iou_depth, iou_threshold
-        masks = segment(img, channels=[0, 0], model_type=model_type_, diameter=diameter_)
+        masks = segment(img_, channels=[0, 0], model_type=model_type_, diameter=diameter_)
 
     else:
 
-        # Init model
-        model = models.Cellpose(gpu=True, model_type=model_type_)
+        # Requires to be distributed algorithm in case the image is too large
+        if distributed_:
+            img_ = convert_image(img_, channels=[0, 0], z_axis=0)
+            img_ = img_[:, :, :, np.newaxis]
+            diameter_tuple = (diameter_, diameter_, diameter_)
+            test = segment(img_, channels=[0, 0], model_type=model_type_, diameter=diameter_tuple)
+        else:
+            # Init model
+            model = models.Cellpose(gpu=True, model_type=model_type_)
 
-        # Eval model
-        # Various Argument:
-        # - x: list of array of images list(2D/3D) or array of 2D/3D images, or 4D array of image
-        # - channels: length(2)
-        #       - 1: channel to segment (0=grayscale, 1=red, 2=green, 3=blue)
-        #       - 2: optional nuclear channel (0=none, 1=red, 2=green 3=blue)
-        #       in DAPI images no different channels for nucleus
-        # - invert(false), normalize(true)
-        # - net_avg: 4 built-in networks and averages them (false)
-        # - diameter (default: 30), flow threshold (0.4)
-        # - batch size (224x224 patches to run simultaneously
-        # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
+            # Eval model Parameters
+            # - x: list of array of images list(2D/3D) or array of 2D/3D images, or 4D array of image
+            # - channels: length(2)
+            #       - 1: channel to segment (0=grayscale, 1=red, 2=green, 3=blue)
+            #       - 2: optional nuclear channel (0=none, 1=red, 2=green 3=blue)
+            #       in DAPI images no different channels for nucleus
+            # - invert(false), normalize(true)
+            # - net_avg: 4 built-in networks and averages them (false)
+            # - diameter (default: 30), flow threshold (0.4)
+            # - batch size (224x224 patches to run simultaneously
+            # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
 
-        masks, flows, styles, diameters = model.eval(x=[img], batch_size=16, channels=[0, 0], net_avg=net_avg,
-                                                     diameter=diameter_, do_3D=do_3d, progress=True)
+            masks, flows, styles, diameters = model.eval(x=[img_], batch_size=16, channels=[0, 0], net_avg=net_avg_,
+                                                         diameter=diameter_, do_3D=do_3d_, progress=True)
 
     return build_cellpose_mask_outlines(masks)
 
@@ -109,14 +131,20 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
     fig, axs = plt.subplots(nrows=3, ncols=3, figsize=(30, 30))
     [ax.axis("off") for ax in axs.ravel()]
 
+    distributed_ = False
     if square_size is not None:
         [ax.imshow(patch) for ax in axs.ravel()]
     else:  # small region to plot
         og = (patch.shape[0]//2 - 400, patch.shape[0]//2 + 400)
         [ax.imshow(patch[og[0]:og[1], og[0]:og[1]]) for ax in axs.ravel()]
+        # distributed_ = True
+
+
 
     for ax, (model_, diameter_) in zip(axs.ravel(), comb):
-        masks_cellpose = segment_cellpose(patch, model_type_=model_, do_3d=False, diameter_=diameter_)
+
+        masks_cellpose = segment_cellpose(patch, model_type_=model_, do_3d_=False, diameter_=diameter_,
+                                          distributed_=distributed_)
 
         if save_masks:
             masks_dir = RESULTS / "masks"
@@ -154,12 +182,12 @@ def run_cellpose_2d(path_replicate: Path, img_type: str = "mip"):
     """
 
     # Load Image Type
-    img = load_image(path_replicate, img_type)
+    img = src_utils.load_image(path_replicate, img_type)
 
     # Returns a test patch with the image boundaries
-    patch, boundaries = image_patch(img, square_size_=700, format_="test")
+    patch, boundaries = src_utils.image_patch(img, square_size_=700, format_="test")
 
-    adata = load_xenium_data(Path(str(path_replicate) + ".h5ad"))
+    adata = src_utils.load_xenium_data(Path(str(path_replicate) + ".h5ad"))
 
     # Convert xenium predefined nucleus boundaries to pixels locations
     # (x,y): vertex_x is the horizontal axis / vertex y is the vertical axis
@@ -179,16 +207,16 @@ def run_cellpose_2d(path_replicate: Path, img_type: str = "mip"):
                                                      ]
 
     # Run CellPose with 3 predefined models (nuclei, cyto, cyto2)
-    seg_patch_nuclei = segment_cellpose(patch, model_type_="nuclei")
+    seg_patch_nuclei = segment_cellpose(patch, model_type_="nuclei", distributed_=distributed_)
     seg_patch_nuclei_outlines = outlines_list(seg_patch_nuclei, multiprocessing=False)
 
-    seg_patch_cyto = segment_cellpose(patch, model_type_="cyto")
+    seg_patch_cyto = segment_cellpose(patch, model_type_="cyto", distributed_=distributed_)
     seg_patch_cyto_outlines = outlines_list(seg_patch_cyto, multiprocessing=False)
 
-    seg_patch_cyto2 = segment_cellpose(patch, model_type_="cyto2")
+    seg_patch_cyto2 = segment_cellpose(patch, model_type_="cyto2", distributed_=distributed_)
     seg_patch_cyto2_outlines = outlines_list(seg_patch_cyto2, multiprocessing=False)
 
-    seg_patch_comb = segment_cellpose(patch, net_avg=True)
+    seg_patch_comb = segment_cellpose(patch, net_avg_=True, distributed_=distributed_)
     seg_patch_comb_outlines = outlines_list(seg_patch_comb, multiprocessing=False)
 
     plt.imshow(patch)
@@ -258,7 +286,7 @@ def run_cellpose_3d(path_replicate_: Path, level_: int = 0, diameter_: int = 10)
     print("Segmenting the whole image")
 
     if not os.path.isfile(RESULTS_3D / "mask_outline.pkl"):
-        seg_3d = segment_cellpose(img, do_3d=True, diameter_=diameter_)
+        seg_3d = segment_cellpose(img, do_3d_=True, diameter_=diameter_, distributed_=distributed_)
         with open(RESULTS_3D / f"mask_level{level_}_diameter{diameter_}.pkl", "wb") as file:
             pickle.dump(seg_3d, file)
         seg_3d_outlines = outlines_list(seg_3d, multiprocessing=False)
@@ -340,7 +368,12 @@ def transcripts_assignments(masks: np.ndarray, adata, save_path: str, qv_cutoff:
 
 def build_results_dir():
     global RESULTS
-    RESULTS = Path("../../../scratch/lbrunsch/results/nucleus_segmentation/cellpose")
+
+    if platform.system() != "Windows":
+        working_dir = Path("..")
+    else:
+        working_dir = Path("../../..")
+    RESULTS = working_dir / "scratch/lbrunsch/results/nucleus_segmentation/cellpose"
     os.makedirs(RESULTS, exist_ok=True)
     global RESULTS_3D
     RESULTS_3D = RESULTS / "3d_segmentation"
@@ -356,11 +389,15 @@ if __name__ == "__main__":
 
     # Run Parameters
     run = "2D"  # alternative: 3D or Patch
-    square_size = 1000
+    square_size = 2000
     optimize = True
 
     # Path
-    data_path = Path("../../../scratch/lbrunsch/data")
+    if platform.system() != "Windows":
+        working_dir = Path("..")
+    else:
+        working_dir = Path("../../..")
+    data_path = working_dir / "scratch/lbrunsch/data"
     path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
 
     if run == "2D":
