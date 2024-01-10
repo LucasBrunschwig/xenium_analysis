@@ -101,7 +101,7 @@ def segment_cellpose(
             # - batch size (224x224 patches to run simultaneously
             # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
 
-            masks, flows, styles, diameters = model.eval(x=[img_], batch_size=4, channels=[0, 0], net_avg=net_avg_,
+            masks, flows, styles, diameters = model.eval(x=[img_], batch_size=16, channels=[0, 0], net_avg=net_avg_,
                                                          diameter=diameter_, do_3D=do_3d_, progress=True)
 
     return build_cellpose_mask_outlines(masks)
