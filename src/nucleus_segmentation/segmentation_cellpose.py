@@ -15,11 +15,10 @@ import logging
 from itertools import product
 import platform
 
-
 if platform.system() != "Windows":
     import resource
     import sys
-
+    # test
     # Set the maximum memory usage in bytes (300GB)
     max_memory = int(3e12)
     resource.setrlimit(resource.RLIMIT_AS, (max_memory, max_memory))
