@@ -104,56 +104,81 @@ def build_stardist_mask_outlines(masks):
 
 
 def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: str, square_size: Optional[int],
-                         level_: int, save_masks: bool = True):
+                         level_: int, compute_masks: bool = True):
 
     img = src_utils.load_image(path_replicate_, img_type=image_type_, level_=level_)
     patch, boundaries = src_utils.image_patch(img, square_size_=square_size)
 
-    fig, axs = plt.subplots(nrows=4, ncols=4, figsize=(40, 40))
-    [ax.axis("off") for ax in axs.ravel()]
 
-    if square_size is not None:
-        [ax.imshow(patch) for ax in axs.ravel()]
-    else:  # small region to plot
-        og = (patch.shape[0]//2 - 400, patch.shape[0]//2 + 400)
-        [ax.imshow(patch[og[0]:og[1], og[0]:og[1]]) for ax in axs.ravel()]
 
     # default 2D prob = 0.479, nms threshold = 0.3
     prob_thresh = [0.3, 0.4, 0.5, 0.7]
     nms_thresh = [0.1, 0.3, 0.5, 0.7]
 
-    for i, nms in enumerate(nms_thresh):
-        masks_stardist, details = segment_stardist(patch, model_type_=model_type_, do_3d=False,
-                                                  prob_thrsh=min(prob_thresh), nms_thrsh=nms)
+    masks_dir = RESULTS / "masks"
 
-        for j, prob in enumerate(prob_thresh):
+    if compute_masks:
+        for i, nms in enumerate(nms_thresh):
 
-            if prob != min(prob_thresh):
-                masks_stardist = masks_stardist[0:len(np.where(details["prob"] > prob)[0])]
+            masks_stardist, details = segment_stardist(patch, model_type_=model_type_, do_3d=False,
+                                                       prob_thrsh=min(prob_thresh), nms_thrsh=nms)
 
-            if save_masks:
-                masks_dir = RESULTS / "masks"
-                os.makedirs(masks_dir, exist_ok=True)
+            for j, prob in enumerate(prob_thresh):
 
-                with open(masks_dir / f"masks_{model_type_}-nms{nms}-prob{prob}"
-                                      f"_{image_type_}-{square_size}.pkl", 'wb') as file:
-                    pickle.dump(masks_stardist, file)
+                if prob != min(prob_thresh):
+                    masks_stardist = masks_stardist[0:len(np.where(details["prob"] > prob)[0])]
 
-            ax = axs[i, j]
+                    os.makedirs(masks_dir, exist_ok=True)
 
-            ax.set_title(f"Prob: {prob}, Nms: {nms}")
-            for mask in masks_stardist:
-                if square_size is not None or (square_size is None and
-                                               ((og[0] < mask[0, :].max() < og[1]) or
-                                                (og[0] < mask[0, :].min() < og[1]) or
-                                                (og[0] < mask[1, :].max() < og[1]) or
-                                                (og[0] < mask[1, :].min() < og[1]))):
+                    with open(masks_dir / f"masks_{model_type_}-nms{nms}-prob{prob}"
+                                          f"_{image_type_}-{square_size}.pkl", 'wb') as file:
+                        pickle.dump(masks_stardist, file)
 
-                    ax.plot(mask[0, :], mask[1, :], 'r', linewidth=.8)
+    try:
 
-    plt.tight_layout()
-    plt.savefig(RESULTS / f"stardist_2d_optimization_{image_type_}_{model_type_}_{square_size}.png")
-    plt.close()
+        square_origin = [(15000, 15000), (30000, 30000), (10000, 10000), (20000, 1000),
+                         (15000, 2000), (2000, 19000), (5000, 5000), (5000, 30000), (5000, 15000)]
+
+        for x_og, y_og in square_origin:
+            fig, axs = plt.subplots(nrows=4, ncols=4, figsize=(40, 40))
+            [ax.axis("off") for ax in axs.ravel()]
+
+            if square_size is not None:
+                [ax.imshow(patch) for ax in axs.ravel()]
+            else:  # small region to plot
+                x_range = (x_og - 400, x_og + 400)
+                y_range = (y_og - 400, y_og + 400)
+                [ax.imshow(patch[y_range[0]:y_range[1], x_range[0]:x_range[1]]) for ax in axs.ravel()]
+
+            for i, nms in enumerate(nms_thresh):
+                for j, prob in enumerate(prob_thresh):
+                    with open(masks_dir / f"masks_{model_type_}-nms{nms}-prob{prob}"
+                                          f"_{image_type_}-{square_size}.pkl", 'rb') as file:
+                        masks_stardist = pickle.load(file)
+
+                    ax = axs[i, j]
+
+                    ax.set_title(f"Prob: {prob}, Nms: {nms}")
+                    for mask in masks_stardist:
+                        if square_size is not None:
+                            ax.plot(mask[0, :], mask[1, :], 'r', linewidth=.8)
+                        elif (((x_range[0] < mask[0, :].max() < x_range[1]) or
+                               (x_range[0] < mask[0, :].min() < x_range[1])) and
+                              ((y_range[0] < mask[1, :].max() < y_range[1]) or
+                               (y_range[0] < mask[1, :].min() < y_range[1]))):
+                            x = mask[0, :] - x_range[0]
+                            y = mask[1, :] - y_range[0]
+                            ax.plot(x, y, 'r', linewidth=.8)
+
+
+            plt.tight_layout()
+            plt.savefig(RESULTS / f"stardist_2d_optimization_{image_type_}_{model_type_}_{square_size}_"
+                                  f"({x_range[0]}-{y_range[0]}).png")
+            plt.close()
+
+    except Exception as e:
+        print(f"Missing Masks File: {f'masks_{model_type_}-nms{nms}-prob{prob}_{image_type_}-{square_size}.pkl'}")
+        print(f"Try calling, optimize function with: compute_masks = True")
 
 
 def run_patch_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: str,
@@ -264,7 +289,8 @@ if __name__ == "__main__":
         level = 0
 
         if optimize:
-            optimize_stardist_2d(path_replicate_1, model_type, image_type, square_size=square_size_, level_=level)
+            optimize_stardist_2d(path_replicate_1, model_type, image_type, square_size=square_size_, level_=level,
+                                 compute_masks=False)
 
         else:
             # Model Parameters
