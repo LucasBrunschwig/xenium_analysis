@@ -101,8 +101,8 @@ def segment_cellpose(
             # - batch size (224x224 patches to run simultaneously
             # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
 
-            masks, flows, styles, diameters = model.eval(x=[img_], batch_size=2, channels=[0, 0], net_avg=net_avg_,
-                                                         diameter=None, do_3D=do_3d_, progress=True, flow_threshold=0.2)
+            masks, flows, styles, diameters = model.eval(x=[img_], batch_size=1, channels=[0, 0], net_avg=net_avg_,
+                                                         diameter=None, do_3D=do_3d_, progress=True, flow_threshold=0.4)
 
     return build_cellpose_mask_outlines(masks)
 
@@ -137,7 +137,6 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
         og = (patch.shape[0]//2 - 400, patch.shape[0]//2 + 400)
         [ax.imshow(patch[og[0]:og[1], og[0]:og[1]]) for ax in axs.ravel()]
         distributed_ = True
-
 
     distributed_ = False
 
