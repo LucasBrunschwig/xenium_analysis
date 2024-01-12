@@ -109,8 +109,6 @@ def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: s
     img = src_utils.load_image(path_replicate_, img_type=image_type_, level_=level_)
     patch, boundaries = src_utils.image_patch(img, square_size_=square_size)
 
-
-
     # default 2D prob = 0.479, nms threshold = 0.3
     prob_thresh = [0.3, 0.4, 0.5, 0.7]
     nms_thresh = [0.1, 0.3, 0.5, 0.7]
@@ -136,8 +134,8 @@ def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: s
 
     try:
 
-        square_origin = [(15000, 15000), (30000, 30000), (10000, 10000), (20000, 1000),
-                         (15000, 2000), (2000, 19000), (5000, 5000), (5000, 30000), (5000, 15000)]
+        square_origin = [(15000, 15000), (30000, 30000), (10000, 10000), (22400, 3830),
+                         (21080, 20900), (2000, 19000), (5000, 5000), (3850, 22600), (5000, 15000)]
 
         for x_og, y_og in square_origin:
             fig, axs = plt.subplots(nrows=4, ncols=4, figsize=(40, 40))
@@ -156,6 +154,7 @@ def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: s
                                           f"_{image_type_}-{square_size}.pkl", 'rb') as file:
                         masks_stardist = pickle.load(file)
 
+                    print(len(masks_stardist))
                     ax = axs[i, j]
 
                     ax.set_title(f"Prob: {prob}, Nms: {nms}")

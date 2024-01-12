@@ -1,4 +1,6 @@
 # Std
+import functools
+import operator
 import os
 import pickle
 from pathlib import Path
@@ -14,6 +16,19 @@ import numpy as np
 import logging
 from itertools import product
 import platform
+import dask.array as da
+import dask
+
+
+class DistSegError(Exception):
+    """Error in image segmentation."""
+
+try:
+    from dask_image.ndmeasure._utils import _label
+    from sklearn import metrics as sk_metrics
+except ModuleNotFoundError as e:
+    raise DistSegError("Install 'cellpose[distributed]' for distributed segmentation dependencies") from e
+
 
 if platform.system() != "Windows":
     import resource
@@ -43,15 +58,13 @@ def init_logger():
     logger.propagate = True
 
 
-
-
 def segment_cellpose(
         img_: np.ndarray,
         model_type_: str = "nuclei",
         net_avg_: bool = False,
         do_3d_: bool = False,
         diameter_: int = 30,
-        distributed_: bool = False,
+        chunk_: int = None,
         **kwargs
 ) -> np.ndarray:
     """Run cellpose and get masks
@@ -63,7 +76,7 @@ def segment_cellpose(
     net_avg_: evaluate 1 model or average of 4 built-in models
     do_3d_: perform 3D nuclear segmentation requires 3D array
     diameter_: estimated size of nucleus
-    distributed_: requires distributed computing if images are extremely large
+    chunk_: requires distributed computing if images are extremely large
 
     Returns
     -------
@@ -77,53 +90,212 @@ def segment_cellpose(
 
     else:
 
-        # Requires to be distributed algorithm in case the image is too large
-        if distributed_:
-            img_ = convert_image(img_, channels=[0, 0], z_axis=0)
-            img_ = img_[:, :, :, np.newaxis]
-            diameter_tuple = (1, diameter_, diameter_)
-            test = segment(img_, channels=[0, 0], model_type=model_type_, diameter=diameter_tuple)
+        # Init model
+        model = models.Cellpose(gpu=True, model_type=model_type_)
+
+        # Eval model Parameters
+        # - x: list of array of images list(2D/3D) or array of 2D/3D images, or 4D array of image
+        # - channels: length(2)
+        #       - 1: channel to segment (0=grayscale, 1=red, 2=green, 3=blue)
+        #       - 2: optional nuclear channel (0=none, 1=red, 2=green 3=blue)
+        #       in DAPI images no different channels for nucleus
+        # - invert(false), normalize(true)
+        # - net_avg: 4 built-in networks and averages them (false)
+        # - diameter (default: 30), flow threshold (0.4)
+        # - batch size (224x224 patches to run simultaneously
+        # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
+
+        if chunk_ is None:
+            chunk_ = img_.shape[0] // 4
+
+        img_da = da.asarray(img_, chunks=(chunk_, chunk_))
+        boundary = "none"
+        image = da.overlap.overlap(img_da, depth={0: diameter_+10, 1: diameter_+10}, boundary={0: boundary, 1: boundary})
+        total = None
+
+        block_iter = zip(
+            np.ndindex(*image.numblocks),
+            map(
+                functools.partial(operator.getitem, image),
+                da.core.slices_from_chunks(image.chunks),
+            ),
+        )
+
+        labeled_blocks = np.empty(image.numblocks, dtype=object)
+        for index, input_block in block_iter:
+            labeled_block, _, _, _ = dask.delayed(model.eval, nout=4)(x=input_block, batch_size=8, channels=[0, 0],
+                                                                      net_avg=net_avg_, diameter=30, do_3D=False,
+                                                                      progress=False)
+
+            shape = input_block.shape
+            labeled_block = da.from_delayed(labeled_block, shape=shape, dtype=np.int32)
+
+            # Ensure that labels are separate
+            n = labeled_block.max()
+            n = dask.delayed(np.int32)(n)
+            n = da.from_delayed(n, shape=(), dtype=np.int32)
+
+            total = n if total is None else total + n
+
+            block_label_offset = da.where(labeled_block > 0, total, np.int32(0))
+            labeled_block += block_label_offset
+
+            labeled_blocks[index] = labeled_block
+            total += n
+
+        # Put all the blocks together
+        block_labeled = da.block(labeled_blocks.tolist())
+
+        depth = da.overlap.coerce_depth(2, {0: diameter_+10, 1: diameter_+10})
+
+        # Actual Stitching
+        iou_threshold = 0.8
+        iou_depth = {0: diameter_, 1: diameter_}
+
+        if np.prod(block_labeled.numblocks) > 1:
+            # Select how much overlap do you want to join
+            iou_depth = da.overlap.coerce_depth(len(depth), iou_depth)
+
+            if any(iou_depth[ax] > depth[ax] for ax in depth.keys()):
+                raise DistSegError("iou_depth (%s) > depth (%s)" % (iou_depth, depth))
+
+            trim_depth = {k: depth[k] - iou_depth[k] for k in depth.keys()}
+            block_labeled = da.overlap.trim_internal(
+                block_labeled, trim_depth, boundary=boundary
+            )
+            block_labeled = link_labels(
+                block_labeled,
+                total,
+                iou_depth,
+                iou_threshold=iou_threshold,
+            )
+
+            masks = da.overlap.trim_internal(
+                block_labeled, iou_depth, boundary=boundary
+            )
 
         else:
-            # Init model
-            model = models.Cellpose(gpu=True, model_type=model_type_)
+            masks = da.overlap.trim_internal(
+                block_labeled, depth, boundary=boundary
+            )
 
-            # Eval model Parameters
-            # - x: list of array of images list(2D/3D) or array of 2D/3D images, or 4D array of image
-            # - channels: length(2)
-            #       - 1: channel to segment (0=grayscale, 1=red, 2=green, 3=blue)
-            #       - 2: optional nuclear channel (0=none, 1=red, 2=green 3=blue)
-            #       in DAPI images no different channels for nucleus
-            # - invert(false), normalize(true)
-            # - net_avg: 4 built-in networks and averages them (false)
-            # - diameter (default: 30), flow threshold (0.4)
-            # - batch size (224x224 patches to run simultaneously
-            # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
+    return build_cellpose_mask_outlines(masks.compute())
 
-            masks, flows, styles, diameters = model.eval(x=[img_], batch_size=32, channels=[0, 0], net_avg=net_avg_,
-                                                         diameter=15, do_3D=False, progress=False, flow_threshold=0.4)
 
-    return build_cellpose_mask_outlines(masks)
+def link_labels(block_labeled, total, depth, iou_threshold=1):
+    """
+    Build a label connectivity graph that groups labels across blocks,
+    use this graph to find connected components, and then relabel each
+    block according to those.
+    """
+    label_groups = label_adjacency_graph(block_labeled, total, depth, iou_threshold)
+    new_labeling = _label.connected_components_delayed(label_groups)
+    return _label.relabel_blocks(block_labeled, new_labeling)
+
+
+def label_adjacency_graph(labels, nlabels, depth, iou_threshold):
+    all_mappings = [da.empty((2, 0), dtype=np.int32, chunks=1)]
+    # returns slice representing the overlap (-2*depth + 2*depth) between tile with the associate axis to look for
+    slices_and_axes = get_slices_and_axes(labels.chunks, labels.shape, depth)
+    for face_slice, axis in slices_and_axes:
+        face = labels[face_slice]
+        mapped = _across_block_iou_delayed(face, axis, iou_threshold)
+        all_mappings.append(mapped)
+
+    i, j = da.concatenate(all_mappings, axis=1)
+    result = _label._to_csr_matrix(i, j, nlabels + 1)
+    return result
+
+
+def _across_block_iou_delayed(face, axis, iou_threshold):
+    """Delayed version of :func:`_across_block_label_grouping`."""
+    _across_block_label_grouping_ = dask.delayed(_across_block_label_iou)
+    grouped = _across_block_label_grouping_(face, axis, iou_threshold)
+    return da.from_delayed(grouped, shape=(2, np.nan), dtype=np.int32)
+
+
+def _across_block_label_iou(face, axis, iou_threshold):
+    unique = np.unique(face)
+    face0, face1 = np.split(face, 2, axis)
+
+    intersection = sk_metrics.confusion_matrix(face0.reshape(-1), face1.reshape(-1))
+    sum0 = intersection.sum(axis=0, keepdims=True)
+    sum1 = intersection.sum(axis=1, keepdims=True)
+
+    # Note that sum0 and sum1 broadcast to square matrix size.
+    union = sum0 + sum1 - intersection
+
+    # Ignore errors with divide by zero, which the np.where sets to zero.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        iou = np.where(intersection > 0, intersection / union, 0)
+
+    labels0, labels1 = np.nonzero(iou >= iou_threshold)
+
+    labels0_orig = unique[labels0]
+    labels1_orig = unique[labels1]
+    grouped = np.stack([labels0_orig, labels1_orig])
+
+    valid = np.all(grouped != 0, axis=0)  # Discard any mappings with bg pixels
+    return grouped[:, valid]
+
+
+def get_slices_and_axes(chunks, shape, depth):
+    ndim = len(shape)
+
+    # overlap depth is represented as {0: n, 1: n}
+    depth = da.overlap.coerce_depth(ndim, depth)
+
+    # get slice limit of the image
+    slices = da.core.slices_from_chunks(chunks)
+
+    # return slices and axes information
+    slices_and_axes = []
+    for ax in range(ndim):
+        for sl in slices:
+            if sl[ax].stop == shape[ax]:
+                continue
+            slice_to_append = list(sl)
+            slice_to_append[ax] = slice(
+                sl[ax].stop - 2 * depth[ax], sl[ax].stop + 2 * depth[ax]
+            )
+            slices_and_axes.append((tuple(slice_to_append), ax))
+    return slices_and_axes
 
 
 def build_cellpose_mask_outlines(masks):
-    masks_outline = outlines_list(masks[0], multiprocessing=False)
+
+    masks_outline = outlines_list(masks, multiprocessing=False)
     for i, mask in enumerate(masks_outline):
         masks_outline[i] = mask.T
     return masks_outline
 
 
 def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Optional[int],
-                         save_masks: bool = True):
+                         compute_masks: bool = True):
 
+    # Loading Image
     print(f"Loading Images: {img_type_} with size {square_size_}")
     img = src_utils.load_image(path_replicate_, img_type=img_type_, level_=0)
-    img = img.astype(np.uint8)
     patch, boundaries = src_utils.image_patch(img, square_size_=square_size_)
 
+    # Potential Parameters
     model_version_ = ["cyto", "cyto2", "nuclei"]
-    diameter_ = [7, 15, 30]
-    comb = product(model_version_, diameter_)
+    diameters = [7, 15, 30]
+    comb = product(model_version_, diameters)
+
+    masks_dir = RESULTS / "masks"
+    os.makedirs(masks_dir, exist_ok=True)
+
+    if compute_masks:
+        print("Start Segmenting")
+        for model_, diameter_ in comb:
+            print(f"Segment: model-{model_} and diameter-{diameter_}")
+            masks_cellpose = segment_cellpose(patch.copy(), model_type_=model_, do_3d_=False, diameter_=diameter_,
+                                              distributed_=False)
+
+            with open(masks_dir / f"masks_{model_}-diameter{diameter_}"
+                                  f"_{img_type_}-{square_size}.pkl", 'wb') as file:
+                pickle.dump(masks_cellpose, file)
 
     fig, axs = plt.subplots(nrows=3, ncols=3, figsize=(30, 30))
     [ax.axis("off") for ax in axs.ravel()]
@@ -134,28 +306,20 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
         og = (patch.shape[0]//2 - 400, patch.shape[0]//2 + 400)
         [ax.imshow(patch[og[0]:og[1], og[0]:og[1]]) for ax in axs.ravel()]
 
-
-    print("Start Segmenting")
+    comb = product(model_version_, diameters)
     for ax, (model_, diameter_) in zip(axs.ravel(), comb):
-        print(f"Segment: model-{model_} and diameter-{diameter_}")
-        masks_cellpose = segment_cellpose(patch, model_type_=model_, do_3d_=False, diameter_=diameter_,
-                                          distributed_=False)
-        print(f"Saving Masks")
-        if save_masks:
-            masks_dir = RESULTS / "masks"
-            os.makedirs(masks_dir, exist_ok=True)
-
-            with open(masks_dir / f"masks_{model_version_}-diameter{diameter_}"
-                                  f"_{img_type_}-{square_size}.pkl", 'wb') as file:
-                pickle.dump(masks_cellpose, file)
-
         ax.set_title(f"Model: {model_}, Diam: {diameter_}")
+
+        with open(masks_dir / f"masks_{model_}-diameter{diameter_}"
+                              f"_{img_type_}-{square_size}.pkl", 'rb') as file:
+            masks_cellpose = pickle.load(file)
+
         for mask in masks_cellpose:
             if square_size is not None or (square_size is None and
-                                           ((og[0] < mask[0, :].max() < og[1]) or
-                                            (og[0] < mask[0, :].min() < og[1]) or
-                                            (og[0] < mask[1, :].max() < og[1]) or
-                                            (og[0] < mask[1, :].min() < og[1]))):
+                                           (((og[0] < mask[0, :].max() < og[1]) or
+                                            (og[0] < mask[0, :].min() < og[1])) and
+                                           ((og[0] < mask[1, :].max() < og[1]) or
+                                            (og[0] < mask[1, :].min() < og[1])))):
                 ax.plot(mask[0, :], mask[1, :], 'r', linewidth=.8)
 
     plt.tight_layout()
