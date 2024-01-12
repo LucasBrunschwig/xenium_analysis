@@ -82,7 +82,7 @@ def segment_cellpose(
         if distributed_:
             img_ = convert_image(img_, channels=[0, 0], z_axis=0)
             img_ = img_[:, :, :, np.newaxis]
-            diameter_tuple = (diameter_, diameter_, diameter_)
+            diameter_tuple = (1, diameter_, diameter_)
             test = segment(img_, channels=[0, 0], model_type=model_type_, diameter=diameter_tuple)
 
         else:
@@ -101,8 +101,8 @@ def segment_cellpose(
             # - batch size (224x224 patches to run simultaneously
             # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
 
-            masks, flows, styles, diameters = model.eval(x=[img_], batch_size=1, channels=[0, 0], net_avg=net_avg_,
-                                                         diameter=30, do_3D=do_3d_, progress=True, flow_threshold=0.4)
+            masks, flows, styles, diameters = model.eval(x=[img_], batch_size=32, channels=[0, 0], net_avg=net_avg_,
+                                                         diameter=15, do_3D=False, progress=False, flow_threshold=0.4)
 
     return build_cellpose_mask_outlines(masks)
 
@@ -138,7 +138,7 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
         [ax.imshow(patch[og[0]:og[1], og[0]:og[1]]) for ax in axs.ravel()]
         distributed_ = True
 
-    distributed_ = False
+    distributed_ = True
 
     print("Start Segmenting")
     for ax, (model_, diameter_) in zip(axs.ravel(), comb):
