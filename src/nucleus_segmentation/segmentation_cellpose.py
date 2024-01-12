@@ -128,22 +128,18 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
     fig, axs = plt.subplots(nrows=3, ncols=3, figsize=(30, 30))
     [ax.axis("off") for ax in axs.ravel()]
 
-    distributed_ = False
-
     if square_size is not None:
         [ax.imshow(patch) for ax in axs.ravel()]
     else:  # small region to plot
         og = (patch.shape[0]//2 - 400, patch.shape[0]//2 + 400)
         [ax.imshow(patch[og[0]:og[1], og[0]:og[1]]) for ax in axs.ravel()]
-        distributed_ = True
 
-    distributed_ = True
 
     print("Start Segmenting")
     for ax, (model_, diameter_) in zip(axs.ravel(), comb):
         print(f"Segment: model-{model_} and diameter-{diameter_}")
         masks_cellpose = segment_cellpose(patch, model_type_=model_, do_3d_=False, diameter_=diameter_,
-                                          distributed_=distributed_)
+                                          distributed_=False)
         print(f"Saving Masks")
         if save_masks:
             masks_dir = RESULTS / "masks"
