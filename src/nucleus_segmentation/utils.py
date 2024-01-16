@@ -5,7 +5,7 @@ import platform
 import matplotlib.pyplot as plt
 
 
-if platform.system() != "Windows":
+if platform.system() == "Linux":
     from .. import utils as src_utils
 else:
     import src.utils as src_utils
