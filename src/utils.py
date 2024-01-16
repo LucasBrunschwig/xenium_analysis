@@ -325,16 +325,16 @@ def image_patch(img_array_, square_size_: int = 400, format_: str = "test", orig
         raise ValueError("Not implemented yet")
 
 
-def check_cuda():
+def check_gpu():
+    device = None
     if torch.cuda.is_available():
         print("GPU available", torch.cuda.current_device())
+        device = torch.cuda.current_device()
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+        print("MPS Device Found")
     else:
         print("No GPU available")
+    return device
 
 
-if __name__ == "__main__":
-    data_path = Path("../../scratch/lbrunsch/data")
-    path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
-    path_output_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1_Formatted"
-    format_xenium_adata(path=path_replicate_1, output_path=data_path / 'Xenium_FF_MB_1')
-    load_xenium_images(path=path_replicate_1)

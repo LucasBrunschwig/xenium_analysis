@@ -17,6 +17,7 @@ from itertools import product
 import platform
 import dask.array as da
 import dask
+import time
 
 
 class DistSegError(Exception):
@@ -27,6 +28,8 @@ try:
     from sklearn import metrics as sk_metrics
 except ModuleNotFoundError as e:
     raise DistSegError("Install 'cellpose[distributed]' for distributed segmentation dependencies") from e
+
+device = None
 
 
 if platform.system() == "Linux":
@@ -95,7 +98,10 @@ def segment_cellpose(
     else:
 
         # Init model
-        model = models.Cellpose(gpu=False, model_type=model_type_)
+        if device is not None:
+            model = models.Cellpose(gpu=True, model_type=model_type_, device=device)
+        else:
+            model = models.Cellpose(gpu=False, model_type=model_type_)
 
         # Eval model Parameters
         # - x: list of array of images list(2D/3D) or array of 2D/3D images, or 4D array of image
@@ -111,7 +117,7 @@ def segment_cellpose(
 
         # Chunk Image
         if chunk_ is None:
-            chunk_ = img_.shape[0] // 2
+            chunk_ = img_.shape[0] // 4
 
         img_da = da.asarray(img_, chunks=(chunk_, chunk_))
 
@@ -186,7 +192,17 @@ def segment_cellpose(
                 block_labeled, depth, boundary=boundary
             )
 
-    return build_cellpose_mask_outlines(masks.compute())
+    # Time the process
+    start_ = time.time()
+    masks = masks.compute()
+    end_ = time.time()
+    print(f"Computing Masks: {end_-start_:.2f}")
+    start_ = time.time()
+    masks_outline = build_cellpose_mask_outlines(masks)
+    end_ = time.time()
+    print(f"Computing Masks Outline: {end_-start_:.2f}")
+
+    return masks, masks_outline
 
 
 def link_labels(block_labeled, total, depth, iou_threshold=1):
@@ -271,7 +287,7 @@ def get_slices_and_axes(chunks, shape, depth):
 
 def build_cellpose_mask_outlines(masks):
 
-    masks_outline = outlines_list(masks, multiprocessing=False)
+    masks_outline = outlines_list(masks, multiprocessing=True)
     for i, mask in enumerate(masks_outline):
         masks_outline[i] = mask.T
     return masks_outline
@@ -287,7 +303,7 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
 
     # Potential Parameters
     model_version_ = ["cyto", "cyto2", "nuclei"]
-    diameters = [7, 15, 30]
+    diameters = [30, 15, 7]
     comb = product(model_version_, diameters)
 
     masks_dir = RESULTS / "masks"
@@ -297,9 +313,12 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
         print("Start Segmenting")
         for model_, diameter_ in comb:
             print(f"Segment: model-{model_} and diameter-{diameter_}")
-            masks_cellpose = segment_cellpose(patch.copy(), model_type_=model_, do_3d_=False, diameter_=diameter_,
-                                              distributed_=False)
+            masks_cellpose, outline_cellpose = segment_cellpose(patch.copy(), model_type_=model_, do_3d_=False,
+                                                                diameter_=diameter_, distributed_=False)
 
+            with open(masks_dir / f"masks_outline_{model_}-diameter{diameter_}"
+                                  f"_{img_type_}-{square_size}.pkl", 'wb') as file:
+                pickle.dump(outline_cellpose, file)
             with open(masks_dir / f"masks_{model_}-diameter{diameter_}"
                                   f"_{img_type_}-{square_size}.pkl", 'wb') as file:
                 pickle.dump(masks_cellpose, file)
@@ -317,9 +336,10 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
     for ax, (model_, diameter_) in zip(axs.ravel(), comb):
         ax.set_title(f"Model: {model_}, Diam: {diameter_}")
 
-        with open(masks_dir / f"masks_{model_}-diameter{diameter_}"
+        with open(masks_dir / f"masks_outline_{model_}-diameter{diameter_}"
                               f"_{img_type_}-{square_size}.pkl", 'rb') as file:
             masks_cellpose = pickle.load(file)
+
 
         for mask in masks_cellpose:
             if square_size is not None or (square_size is None and
@@ -547,7 +567,7 @@ def build_results_dir():
 if __name__ == "__main__":
 
     # Various set up
-    src_utils.check_cuda()
+    device = src_utils.check_gpu()
     build_results_dir()
     init_logger()
 
