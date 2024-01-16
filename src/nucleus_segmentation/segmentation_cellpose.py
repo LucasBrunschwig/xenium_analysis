@@ -605,7 +605,7 @@ if __name__ == "__main__":
 
     # Run Parameters
     run = "2D"  # alternative: 3D or Patch
-    square_size = 8000
+    square_size = None
     optimize = True
 
     # Path
@@ -626,6 +626,9 @@ if __name__ == "__main__":
             print("Running 2D Optimization on Nuclei")
             square_to_vis = ([(1000, 1000), (4000, 4000), (7000, 7000),
                               (1000, 4000), (4000, 1000), (4000, 7000)], 400)
+
+            square_to_vis = ([(15000, 15000), (30000, 30000), (10000, 10000), (22400, 3830),
+                             (21080, 20900), (2000, 19000), (5000, 5000), (3850, 22600), (5000, 15000)], 400)
 
             optimize_cellpose_2d(path_replicate_1, image_type, square_size_=square_size, square_origin=square_to_vis,
                                  compute_masks=False)
