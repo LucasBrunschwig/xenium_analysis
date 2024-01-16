@@ -1,4 +1,4 @@
-name: nucleus_segmentation
+name: xenium_analysis
 channels:
   - conda-forge
   - defaults
@@ -25,12 +25,6 @@ dependencies:
   - matplotlib >= 3.2.1
   - request >= 2.83.1
   - cython >= 0.29.17
-  - cellpose
-  - stardist
-  - shapely
-  - biopython
-  - tqdm
-  - tensorflow
   - pip:
       - pyro-ppl>=1.7.0
       - scvi-tools>=0.15.3
@@ -38,4 +32,10 @@ dependencies:
       - cell2location>=0.1.3
       - squidpy
       - louvain
+      - cellpose
+      - stardist
+      - shapely
+      - biopython
+      - tqdm
+      - tensorflow
 
