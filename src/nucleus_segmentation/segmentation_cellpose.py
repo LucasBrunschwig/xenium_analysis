@@ -10,7 +10,6 @@ from typing import Optional
 from cellpose import models
 from cellpose.utils import outlines_list
 from cellpose.contrib.distributed_segmentation import segment
-from cellpose.transforms import convert_image
 import matplotlib.pyplot as plt
 import numpy as np
 import logging
@@ -30,10 +29,10 @@ except ModuleNotFoundError as e:
     raise DistSegError("Install 'cellpose[distributed]' for distributed segmentation dependencies") from e
 
 
-if platform.system() != "Windows":
+if platform.system() == "Linux":
     import resource
     import sys
-    # test
+
     # Set the maximum memory usage in bytes (300GB)
     max_memory = int(3e12)
     resource.setrlimit(resource.RLIMIT_AS, (max_memory, max_memory))
@@ -43,10 +42,15 @@ if platform.system() != "Windows":
 
     from .. import utils as src_utils
     from . import utils as segmentation_utils
+
+    WORKING_DIR = "../"
+
 else:
     # Relative import
     import src.utils as src_utils
     import utils as segmentation_utils
+
+    WORKING_DIR = "../../.."
 
 RESULTS = Path()
 RESULTS_3D = Path()
@@ -91,7 +95,7 @@ def segment_cellpose(
     else:
 
         # Init model
-        model = models.Cellpose(gpu=True, model_type=model_type_)
+        model = models.Cellpose(gpu=False, model_type=model_type_)
 
         # Eval model Parameters
         # - x: list of array of images list(2D/3D) or array of 2D/3D images, or 4D array of image
@@ -105,10 +109,13 @@ def segment_cellpose(
         # - batch size (224x224 patches to run simultaneously
         # - augment/tile/tile_overlap/resample/interp/cellprob_threshold/min_size/stitch_threshold
 
+        # Chunk Image
         if chunk_ is None:
-            chunk_ = img_.shape[0] // 4
+            chunk_ = img_.shape[0] // 2
 
         img_da = da.asarray(img_, chunks=(chunk_, chunk_))
+
+        # Extend the image by pixels for continuity
         boundary = "none"
         image = da.overlap.overlap(img_da, depth={0: diameter_+10, 1: diameter_+10}, boundary={0: boundary, 1: boundary})
         total = None
@@ -124,7 +131,7 @@ def segment_cellpose(
         labeled_blocks = np.empty(image.numblocks, dtype=object)
         for index, input_block in block_iter:
             labeled_block, _, _, _ = dask.delayed(model.eval, nout=4)(x=input_block, batch_size=8, channels=[0, 0],
-                                                                      net_avg=net_avg_, diameter=30, do_3D=False,
+                                                                      net_avg=net_avg_, diameter=diameter_, do_3D=False,
                                                                       progress=False)
 
             shape = input_block.shape
@@ -527,14 +534,11 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
 
 
 def build_results_dir():
-    global RESULTS
 
-    if platform.system() != "Windows":
-        working_dir = Path("..")
-    else:
-        working_dir = Path("../../..")
-    RESULTS = working_dir / "scratch/lbrunsch/results/nucleus_segmentation/cellpose"
+    global RESULTS
+    RESULTS = Path(WORKING_DIR) / "scratch/lbrunsch/results/nucleus_segmentation/cellpose"
     os.makedirs(RESULTS, exist_ok=True)
+
     global RESULTS_3D
     RESULTS_3D = RESULTS / "3d_segmentation"
     os.makedirs(RESULTS_3D, exist_ok=True)
@@ -549,16 +553,13 @@ if __name__ == "__main__":
 
     # Run Parameters
     run = "2D"  # alternative: 3D or Patch
-    square_size = None
+    square_size = 8000
     optimize = True
 
     # Path
-    if platform.system() != "Windows":
-        working_dir = Path("..")
-    else:
-        working_dir = Path("../../..")
+    working_dir = Path(WORKING_DIR)
     data_path = working_dir / "scratch/lbrunsch/data"
-    path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
+    path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1_outs"
 
     if run == "2D":
 
