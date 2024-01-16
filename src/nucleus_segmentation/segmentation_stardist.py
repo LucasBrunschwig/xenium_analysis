@@ -132,24 +132,27 @@ def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: s
                                           f"_{image_type_}-{square_size}.pkl", 'wb') as file:
                         pickle.dump(masks_stardist, file)
 
-    try:
+    square_origin = [(15000, 15000), (30000, 30000), (10000, 10000), (22400, 3830),
+                     (21080, 20900), (2000, 19000), (5000, 5000), (3850, 22600), (5000, 15000)]
 
-        square_origin = [(15000, 15000), (30000, 30000), (10000, 10000), (22400, 3830),
-                         (21080, 20900), (2000, 19000), (5000, 5000), (3850, 22600), (5000, 15000)]
+    for x_og, y_og in square_origin:
+        fig, axs = plt.subplots(nrows=4, ncols=4, figsize=(40, 40))
+        [ax.axis("off") for ax in axs.ravel()]
 
-        for x_og, y_og in square_origin:
-            fig, axs = plt.subplots(nrows=4, ncols=4, figsize=(40, 40))
-            [ax.axis("off") for ax in axs.ravel()]
+        x_range = None
+        y_range = None
+        if square_size is not None:
+            [ax.imshow(patch) for ax in axs.ravel()]
+        else:  # small region to plot
+            x_range = (x_og - 400, x_og + 400)
+            y_range = (y_og - 400, y_og + 400)
+            [ax.imshow(patch[y_range[0]:y_range[1], x_range[0]:x_range[1]]) for ax in axs.ravel()]
 
-            if square_size is not None:
-                [ax.imshow(patch) for ax in axs.ravel()]
-            else:  # small region to plot
-                x_range = (x_og - 400, x_og + 400)
-                y_range = (y_og - 400, y_og + 400)
-                [ax.imshow(patch[y_range[0]:y_range[1], x_range[0]:x_range[1]]) for ax in axs.ravel()]
+        for i, nms in enumerate(nms_thresh):
+            for j, prob in enumerate(prob_thresh):
 
-            for i, nms in enumerate(nms_thresh):
-                for j, prob in enumerate(prob_thresh):
+                try:
+
                     with open(masks_dir / f"masks_{model_type_}-nms{nms}-prob{prob}"
                                           f"_{image_type_}-{square_size}.pkl", 'rb') as file:
                         masks_stardist = pickle.load(file)
@@ -169,15 +172,17 @@ def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: s
                             y = mask[1, :] - y_range[0]
                             ax.plot(x, y, 'r', linewidth=.8)
 
+                except Exception as e:
+                    print(f"Missing Masks File: {f'masks_{model_type_}-nms{nms}-prob{prob}_{image_type_}-{square_size}.pkl'}")
+                    print(f"Try calling, optimize function with: compute_masks = True and square_size = {square_size}")
 
-            plt.tight_layout()
-            plt.savefig(RESULTS / f"stardist_2d_optimization_{image_type_}_{model_type_}_{square_size}_"
-                                  f"({x_range[0]}-{y_range[0]}).png")
-            plt.close()
 
-    except Exception as e:
-        print(f"Missing Masks File: {f'masks_{model_type_}-nms{nms}-prob{prob}_{image_type_}-{square_size}.pkl'}")
-        print(f"Try calling, optimize function with: compute_masks = True")
+        plt.tight_layout()
+        plt.savefig(RESULTS / f"stardist_2d_optimization_{image_type_}_{model_type_}_{square_size}_"
+                              f"({x_range[0]}-{y_range[0]}).png")
+        plt.close()
+
+
 
 
 def run_patch_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: str,

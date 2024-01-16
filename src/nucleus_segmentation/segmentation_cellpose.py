@@ -294,7 +294,7 @@ def build_cellpose_mask_outlines(masks):
 
 
 def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Optional[int],
-                         compute_masks: bool = True):
+                         compute_masks: bool = True, square_origin: tuple = (None, None)):
 
     # Loading Image
     print(f"Loading Images: {img_type_} with size {square_size_}")
@@ -303,7 +303,7 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
 
     # Potential Parameters
     model_version_ = ["cyto", "cyto2", "nuclei"]
-    diameters = [30, 15, 7]
+    diameters = [30, 20, 10]
     comb = product(model_version_, diameters)
 
     masks_dir = RESULTS / "masks"
@@ -323,15 +323,12 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
                                   f"_{img_type_}-{square_size}.pkl", 'wb') as file:
                 pickle.dump(masks_cellpose, file)
 
+    # If square origin is Not specified print the whole image
+
     fig, axs = plt.subplots(nrows=3, ncols=3, figsize=(30, 30))
     [ax.axis("off") for ax in axs.ravel()]
 
-    if square_size is not None:
-        [ax.imshow(patch) for ax in axs.ravel()]
-    else:  # small region to plot
-        og = (patch.shape[0]//2 - 400, patch.shape[0]//2 + 400)
-        [ax.imshow(patch[og[0]:og[1], og[0]:og[1]]) for ax in axs.ravel()]
-
+    [ax.imshow(patch) for ax in axs.ravel()]
     comb = product(model_version_, diameters)
     for ax, (model_, diameter_) in zip(axs.ravel(), comb):
         ax.set_title(f"Model: {model_}, Diam: {diameter_}")
@@ -340,18 +337,53 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
                               f"_{img_type_}-{square_size}.pkl", 'rb') as file:
             masks_cellpose = pickle.load(file)
 
-
         for mask in masks_cellpose:
-            if square_size is not None or (square_size is None and
-                                           (((og[0] < mask[0, :].max() < og[1]) or
-                                            (og[0] < mask[0, :].min() < og[1])) and
-                                           ((og[0] < mask[1, :].max() < og[1]) or
-                                            (og[0] < mask[1, :].min() < og[1])))):
-                ax.plot(mask[0, :], mask[1, :], 'r', linewidth=.8)
+            ax.plot(mask[0, :], mask[1, :], 'r', linewidth=.8)
 
     plt.tight_layout()
     plt.savefig(RESULTS / f"cellpose_2d_optimization_{img_type_}_{square_size}.png")
     plt.close()
+
+    if square_origin[0] is not None or square_origin[1] is not None:  # small regions to plot
+
+        # if one or the other is None result to default mode
+        if square_origin[0] is None:
+            square_origin = [(patch.shape[0] // 2, patch.shape[1] // 2)]
+        if square_origin[1] is None:
+            square_origin[1] = 400
+
+        # iterate over each region
+        for x_og, y_og in square_origin[0]:
+            fig, axs = plt.subplots(nrows=3, ncols=3, figsize=(20, 20))
+            [ax.axis("off") for ax in axs.ravel()]
+
+            x_range = (x_og - square_origin[1], x_og + square_origin[1])
+            y_range = (y_og - square_origin[1], y_og + square_origin[1])
+
+            [ax.imshow(patch[y_range[0]:y_range[1], x_range[0]:x_range[1]]) for ax in axs.ravel()]
+
+            comb = product(model_version_, diameters)
+            for ax, (model_, diameter_) in zip(axs.ravel(), comb):
+                ax.set_title(f"Model: {model_}, Diam: {diameter_}")
+
+                with open(masks_dir / f"masks_outline_{model_}-diameter{diameter_}"
+                                      f"_{img_type_}-{square_size}.pkl", 'rb') as file:
+                    masks_cellpose = pickle.load(file)
+
+                for mask in masks_cellpose:
+                    if (mask.shape[1] > 0 and
+                            (((x_range[0] < mask[0, :].max() < x_range[1]) or (x_range[0] < mask[0, :].min() < x_range[1]))
+                            and
+                            ((y_range[0] < mask[1, :].max() < y_range[1]) or (y_range[0] < mask[1, :].min() < y_range[1])))):
+                        x = mask[0, :] - x_range[0]
+                        y = mask[1, :] - y_range[0]
+                        ax.plot(x, y, 'r', linewidth=.8)
+
+            plt.tight_layout()
+            plt.savefig(RESULTS / f"cellpose_2d_optimization_{img_type_}_{square_size}_{x_og}_{y_og}.png", dpi=300)
+            plt.close()
+
+
 
 #
 #
@@ -592,7 +624,11 @@ if __name__ == "__main__":
 
         if optimize:
             print("Running 2D Optimization on Nuclei")
-            optimize_cellpose_2d(path_replicate_1, image_type, square_size_=square_size)
+            square_to_vis = ([(1000, 1000), (4000, 4000), (7000, 7000),
+                              (1000, 4000), (4000, 1000), (4000, 7000)], 400)
+
+            optimize_cellpose_2d(path_replicate_1, image_type, square_size_=square_size, square_origin=square_to_vis,
+                                 compute_masks=False)
 
     #     else:
     #
