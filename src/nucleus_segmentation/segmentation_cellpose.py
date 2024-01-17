@@ -611,7 +611,7 @@ if __name__ == "__main__":
     # Path
     working_dir = Path(WORKING_DIR)
     data_path = working_dir / "scratch/lbrunsch/data"
-    path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1_outs"
+    path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
 
     if run == "2D":
 
