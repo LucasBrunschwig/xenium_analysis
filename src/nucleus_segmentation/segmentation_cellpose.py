@@ -631,7 +631,7 @@ if __name__ == "__main__":
                              (21080, 20900), (2000, 19000), (5000, 5000), (3850, 22600), (5000, 15000)], 400)
 
             optimize_cellpose_2d(path_replicate_1, image_type, square_size_=square_size, square_origin=square_to_vis,
-                                 compute_masks=False)
+                                 compute_masks=True)
 
     #     else:
     #
