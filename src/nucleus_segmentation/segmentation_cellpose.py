@@ -117,7 +117,7 @@ def segment_cellpose(
 
         # Chunk Image
         if chunk_ is None:
-            chunk_ = img_.shape[0] // 4
+            chunk_ = img_.shape[0] // 8
 
         img_da = da.asarray(img_, chunks=(chunk_, chunk_))
 
