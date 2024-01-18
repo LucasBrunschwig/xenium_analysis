@@ -21,36 +21,39 @@ Last Revision: 21.12.2023
 
 # Std
 from pathlib import Path
+from typing import Optional
 
 # Third party
 import numpy as np
 
 # Relative import
-from utils import load_image
-from segment_watershed import segment_watershed
-from segmentation_cellpose import segment_cellpose
-from segmentation_stardist import segment_stardist
-from segmentation_stardist import get_xenium_nucleus_boundaries
+from src.utils import load_image
+from src.nucleus_segmentation.segmentation_watershed import segment_watershed
+from src.nucleus_segmentation.segmentation_cellpose import segment_cellpose
+from src.nucleus_segmentation.segmentation_stardist import segment_stardist
+from src.nucleus_segmentation.utils import get_xenium_nucleus_boundaries, get_masks
 
 
 SEGMENTATION = {"cellpose": segment_cellpose, "stardist": segment_stardist, "watershed": segment_watershed}
 
 
-def extract_masks(img_: np.ndarray, method_: str, dim_: str, path_replicate_: Path = Path()):
+def load_masks(method_: str, dim_: str, path_replicate_: Path = Path(),
+               square_size_: Optional[int] = None, img_type_: str = "mip"):
+    """ This mehod will load masks """
 
     if method_ == "xenium":
-        return get_xenium_nucleus_boundaries(path_replicate_=path_replicate_, get_masks=True)
+        return get_xenium_nucleus_boundaries(path_replicate_=path_replicate_)
 
-    do_3d = True if dim_ == "2D" else False
-
-    # Optimized parameters
+    # Select Masks with Optimized parameters
     param = {}
     if method_ == "cellpose":
-        param = {}
+        param = {"model_": "cyto", "diameter_": 30}
     elif method == "stardist":
+        param = {"prob_thrsh": 0.3, "nms_thrsh": 0.5}
+    elif method == "watershed":
         param = {}
 
-    return SEGMENTATION[method_](img_, do_3d=do_3d, get_mask=True, **param)
+    return get_masks(method, param, square_size_=square_size_, img_type_=img_type_)
 
 
 def run_nucleus_features_extraction(path_replicate_: Path, image_type_: str, level_: int,
@@ -61,6 +64,7 @@ def run_nucleus_features_extraction(path_replicate_: Path, image_type_: str, lev
 
     # Compute Masks
     masks = extract_masks(img, method_, image_dim_, path_replicate_)
+
 
 
     return 0

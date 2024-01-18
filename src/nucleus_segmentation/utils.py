@@ -1,15 +1,19 @@
 from pathlib import Path
 from typing import Callable
 import platform
+import pickle
 
 import matplotlib.pyplot as plt
 
 
 if platform.system() == "Linux":
     from .. import utils as src_utils
+
+    WORKING_DIR = Path("..")
 else:
     import src.utils as src_utils
 
+    WORKING_DIR = Path("../../..")
 
 def get_xenium_nucleus_boundaries(path_replicate_: Path, boundaries: list = None):
 
@@ -41,6 +45,23 @@ def get_xenium_nucleus_boundaries(path_replicate_: Path, boundaries: list = None
         output[1].append(pix_boundaries[pix_boundaries["cell_id"] == cell_seg]["vertex_y_pixel"].to_numpy() - boundaries[0][0])
 
     return output
+
+
+def get_masks(method: str, params: dict, img_type_: str, square_size_: int = None):
+
+    masks_dir = WORKING_DIR / "scratch/lbrunsch/results/nucleus_segmentation"
+
+    if method == "cellpose":
+        try:
+            masks_dir = masks_dir / "cellpose/masks"
+            with open(masks_dir / f"masks_{params['model']}-diameter{params['diameter_']}"
+                                  f"_{img_type_}-{square_size_}.pkl", 'rb') as file:
+                masks_cellpose = pickle.load(file)
+        except Exception as e:
+            print(f"Error: {e}")
+            print(f"CellPose masks with: {params}, image type-{img_type_} and square_size-{square_size_} does not"
+                  f"exist")
+
 
 
 def run_segmentation_2d(path_replicate_: Path, model_type_: str, image_type_: str, model_args: dict, segment_fct: Callable,

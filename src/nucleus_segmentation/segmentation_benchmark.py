@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from src.utils import check_cuda, load_image, image_patch
 from src.nucleus_segmentation.segmentation_cellpose import segment_cellpose
 from src.nucleus_segmentation.segmentation_stardist import segment_stardist
-from src.nucleus_segmentation.segmentaton_watershed import segment_watershed
+from src.nucleus_segmentation.segmentation_watershed import segment_watershed
 
 RESULTS = Path()
 RESULTS_3D = Path()
