@@ -51,7 +51,7 @@ if platform.system() == "Linux":
 else:
     # Relative import
     import src.utils as src_utils
-    import utils as segmentation_utils
+    import src.nucleus_segmentation.utils as segmentation_utils
 
     WORKING_DIR = "../../.."
 
