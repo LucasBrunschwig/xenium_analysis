@@ -15,6 +15,7 @@ else:
 
     WORKING_DIR = Path("../../..")
 
+
 def get_xenium_nucleus_boundaries(path_replicate_: Path, boundaries: list = None):
 
     adata = src_utils.load_xenium_data(Path(str(path_replicate_) + ".h5ad"))
@@ -54,14 +55,15 @@ def get_masks(method: str, params: dict, img_type_: str, square_size_: int = Non
     if method == "cellpose":
         try:
             masks_dir = masks_dir / "cellpose/masks"
-            with open(masks_dir / f"masks_{params['model']}-diameter{params['diameter_']}"
+            with open(masks_dir / f"masks_{params['model_']}-diameter{params['diameter_']}"
                                   f"_{img_type_}-{square_size_}.pkl", 'rb') as file:
-                masks_cellpose = pickle.load(file)
+                masks = pickle.load(file)
         except Exception as e:
+            masks = None
             print(f"Error: {e}")
             print(f"CellPose masks with: {params}, image type-{img_type_} and square_size-{square_size_} does not"
-                  f"exist")
-
+                  f" exist")
+    return masks
 
 
 def run_segmentation_2d(path_replicate_: Path, model_type_: str, image_type_: str, model_args: dict, segment_fct: Callable,

@@ -18,6 +18,8 @@ import platform
 import dask.array as da
 import dask
 import time
+import tifffile
+
 
 
 class DistSegError(Exception):
@@ -117,7 +119,7 @@ def segment_cellpose(
 
         # Chunk Image
         if chunk_ is None:
-            chunk_ = img_.shape[0] // 8
+            chunk_ = img_.shape[0] // 4
 
         img_da = da.asarray(img_, chunks=(chunk_, chunk_))
 
@@ -198,11 +200,11 @@ def segment_cellpose(
     end_ = time.time()
     print(f"Computing Masks: {end_-start_:.2f}")
     start_ = time.time()
-    # masks_outline = build_cellpose_mask_outlines(masks)
+    masks_outline = build_cellpose_mask_outlines(masks)
     end_ = time.time()
     print(f"Computing Masks Outline: {end_-start_:.2f}")
 
-    return masks
+    return masks, masks_outline
 
 
 def link_labels(block_labeled, total, depth, iou_threshold=1):
@@ -298,7 +300,10 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
 
     # Loading Image
     print(f"Loading Images: {img_type_} with size {square_size_}")
-    img = src_utils.load_image(path_replicate_, img_type=img_type_, level_=0)
+    #img = src_utils.load_image(path_replicate_, img_type=img_type_, level_=0)
+    # TMP: DAPI
+    dapi_processed_path = src_utils.get_results_path() / "dapi_preprocessing/mouse_replicate_dapi_preprocessed.tif"
+    img = tifffile.imread(str(dapi_processed_path))
     patch, boundaries = src_utils.image_patch(img, square_size_=square_size_)
 
     # Potential Parameters
@@ -313,12 +318,15 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
         print("Start Segmenting")
         for model_, diameter_ in comb:
             print(f"Segment: model-{model_} and diameter-{diameter_}")
-            masks_cellpose = segment_cellpose(patch, model_type_=model_, do_3d_=False,
+            masks_cellpose, masks_outline = segment_cellpose(patch, model_type_=model_, do_3d_=False,
                                               diameter_=diameter_, distributed_=False)
 
-            with open(masks_dir / f"masks_{model_}-diameter{diameter_}"
+            with open(masks_dir / f"dapi_masks_{model_}-diameter{diameter_}"
                                   f"_{img_type_}-{square_size}.pkl", 'wb') as file:
                 pickle.dump(masks_cellpose, file)
+            with open(masks_dir / f"dapi_masks_outline                                     _{model_}-diameter{diameter_}"
+                                  f"_{img_type_}-{square_size}.pkl", 'wb') as file:
+                pickle.dump(masks_outline, file)
 
     # If square origin is Not specified print the whole image
     if visualize:
@@ -330,7 +338,7 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
         for ax, (model_, diameter_) in zip(axs.ravel(), comb):
             ax.set_title(f"Model: {model_}, Diam: {diameter_}")
 
-            with open(masks_dir / f"masks_outline_{model_}-diameter{diameter_}"
+            with open(masks_dir / f"dapi_masks_outline_{model_}-diameter{diameter_}"
                                   f"_{img_type_}-{square_size}.pkl", 'rb') as file:
                 masks_cellpose = pickle.load(file)
 
@@ -338,7 +346,7 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
                 ax.plot(mask[0, :], mask[1, :], 'r', linewidth=.8)
 
         plt.tight_layout()
-        plt.savefig(RESULTS / f"cellpose_2d_optimization_{img_type_}_{square_size}.png")
+        plt.savefig(RESULTS / f"dapi_preprocessed_cellpose_2d_optimization_{img_type_}_{square_size}.png")
         plt.close()
 
         if square_origin[0] is not None or square_origin[1] is not None:  # small regions to plot
@@ -377,7 +385,7 @@ def optimize_cellpose_2d(path_replicate_: Path, img_type_: str, square_size_: Op
                             ax.plot(x, y, 'r', linewidth=.8)
 
                 plt.tight_layout()
-                plt.savefig(RESULTS / f"cellpose_2d_optimization_{img_type_}_{square_size}_{x_og}_{y_og}.png", dpi=300)
+                plt.savefig(RESULTS / f"dapi_preprocessed_cellpose_2d_optimization_{img_type_}_{square_size}_{x_og}_{y_og}.png", dpi=300)
                 plt.close()
 
 
@@ -602,7 +610,7 @@ if __name__ == "__main__":
 
     # Run Parameters
     run = "2D"  # alternative: 3D or Patch
-    square_size = None
+    square_size = 8000
     optimize = True
 
     # Path
@@ -624,8 +632,8 @@ if __name__ == "__main__":
             square_to_vis = ([(1000, 1000), (4000, 4000), (7000, 7000),
                               (1000, 4000), (4000, 1000), (4000, 7000)], 400)
 
-            square_to_vis = ([(15000, 15000), (30000, 30000), (10000, 10000), (22400, 3830),
-                             (21080, 20900), (2000, 19000), (5000, 5000), (3850, 22600), (5000, 15000)], 400)
+            #square_to_vis = ([(15000, 15000), (30000, 30000), (10000, 10000), (22400, 3830),
+            #                 (21080, 20900), (2000, 19000), (5000, 5000), (3850, 22600), (5000, 15000)], 400)
 
             optimize_cellpose_2d(path_replicate_1, image_type, square_size_=square_size, square_origin=square_to_vis,
                                  compute_masks=True, visualize=False)

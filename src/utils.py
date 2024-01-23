@@ -14,6 +14,21 @@ import squidpy as sq
 import numpy as np
 import tifffile
 import torch
+import json
+import xmltodict
+
+
+def load_config():
+
+    # Get Absolute Path
+    path = Path(f"{os.sep}".join(os.path.abspath(__file__).split(os.sep)[:-1]))
+
+    with open(path / "config.json", 'r') as file:
+        config = json.load(file)
+
+    config["absolute_path"] = f"{os.sep}".join(os.path.abspath(__file__).split(os.sep)[:-3])
+
+    return config
 
 
 def decompress(path_file, extension='gz'):
@@ -50,6 +65,7 @@ def format_xenium_adata(path: Path, output_path: Path,
         decompress(path / 'transcripts.csv')
         decompress(path / 'cell_boundaries.csv')
         decompress(path / 'nucleus_boundaries.csv')
+        decompress(path / 'cells.csv')
 
         # read data that contains cell feature matrix and some additional information
         adata = sc.read_10x_h5(path / "cell_feature_matrix.h5")
@@ -148,7 +164,7 @@ def load_xenium_images(path: Path, type: str = None):
     return results
 
 
-def load_xenium_data(path: Path, formatted: bool = True):
+def load_xenium_data(path: Path):
     """
 
     Parameters
@@ -161,38 +177,19 @@ def load_xenium_data(path: Path, formatted: bool = True):
 
     """
 
-    if formatted and str(path).endswith(".h5ad"):
-        adata = anndata.read_h5ad(path)
-    elif not formatted:
-        adata = format_xenium_adata(path, output_path=path)
+    if str(path).endswith(".h5ad"):
+        path_file = path
+        path_data = Path(str(path)[:-5])
     else:
-        raise ValueError("Formatted Expect a '.h5ad' file path")
+        path_data = path
+        path_file = Path(str(path)+".h5ad")
 
-    # ##############################################################
-    # Deprecated Version
-    # # Load h5 file for transcriptomics matrix data
-    # adata = sc.read_10x_h5(os.path.join(path, "cell_feature_matrix.h5"))
-    #
-    # # Load Observation for each spots
-    # with gzip.open(os.path.join(path, "cells.csv.gz"), "rt") as file:
-    #     df = pd.read_csv(file)
-    #
-    # # Combine both information
-    # df.set_index(adata.obs_names, inplace=True)
-    # adata.obs = df
-    # adata.obs["og_index"] = adata.obs.index
-    # adata.obs_names_make_unique()
-    #
-    # # Format Spatial information for plotting
-    # adata.obsm["spatial"] = adata.obs[["x_centroid", "y_centroid"]].copy().to_numpy()
-    #
-    # # Ensure unique index for gene
-    # adata.var["SYMBOL"] = adata.var.index
-    # adata.var.set_index("gene_ids", drop=True, inplace=True)
-    #
-    # # Mark the 'mt' gene
-    # adata.var['mt'] = [gene.startswith('mt-') for gene in adata.var['SYMBOL']]
-    # ##############################################################
+    if os.path.isfile(path_file):
+        adata = anndata.read_h5ad(path_file)
+    elif os.path.isdir(path_data):
+        adata = format_xenium_adata(path_data, output_path=path_data)
+    else:
+        raise ValueError(f"Path does not exist {path}")
 
     return adata
 
@@ -338,3 +335,52 @@ def check_gpu():
     return device
 
 
+def get_data_path(working_dir: Path = None) -> Path:
+    if working_dir is None:
+        config = load_config()
+        working_dir = Path(config["absolute_path"])
+    return working_dir / "scratch/lbrunsch/data"
+
+
+def get_results_path(working_dir: Path = None) -> Path:
+    if working_dir is None:
+        config = load_config()
+        working_dir = Path(config["absolute_path"])
+    return working_dir / "scratch/lbrunsch/results"
+
+
+def get_working_dir():
+    return load_config()["absolute_path"]
+
+
+def get_mouse_xenium_path():
+    config = load_config()
+    return get_data_path() / config["mouse_replicate_1"]
+
+
+def get_human_breast_he_path():
+    config = load_config()
+    return get_data_path() / config["human_breast_replicate_1"]
+
+
+def load_xenium_he_ome_tiff(path: Path, level_):
+
+    print("")
+    with tifffile.TiffFile(path) as tif:
+        print(f"Number of series: {len(tif.series)}")
+        image = tif.series[0].levels[level_].asarray()
+        metadata = xmltodict.parse(tif.ome_metadata, attr_prefix='')['OME']
+
+    # This holds because there is only one series ! With multiple series
+    dimension_order = metadata["Image"]["Pixels"]["DimensionOrder"]
+    physical_size_x = float(metadata["Image"]["Pixels"]["PhysicalSizeX"])
+    physical_size_y = float(metadata["Image"]["Pixels"]["PhysicalSizeY"])
+    pyramidal = {}
+    for key, dimensions in enumerate(metadata["StructuredAnnotations"]["MapAnnotation"]["Value"]["M"]):
+        pyramidal[key] = [int(el) for el in dimensions["#text"].split(" ")]
+    custom_metadata = {"dimension": dimension_order, "x_size": physical_size_x, "y_size": physical_size_y,
+                       "levels": pyramidal}
+
+    print("Warning: missing information about color channels")
+
+    return image, custom_metadata

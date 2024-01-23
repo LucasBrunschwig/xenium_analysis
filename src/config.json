@@ -1,0 +1,10 @@
+{
+  "data_path": "scratch/lbrunsch/data",
+  "results_path": "scratch/lbrunsch/results",
+  "scratch_dir": "..",
+  "mouse_replicate_1": "Xenium_V1_FF_Mouse_Brain_MultiSection_1",
+  "human_breast_replicate_1": "Xenium_FFPE_Human_Breast_Cancer_Rep1",
+  "nucleus_segmentation": "nucleus_segmentation",
+  "nuclear_features": "nucleus_features",
+  "cell_segmentation": "cell_segmentation"
+}

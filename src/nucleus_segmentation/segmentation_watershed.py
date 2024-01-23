@@ -17,7 +17,7 @@ from squidpy.im import ImageContainer
 from src.utils import load_image, image_patch, load_xenium_data
 
 
-if platform.system() != "Windows":
+if platform.system() == "Linux":
     import resource
     # Set the maximum memory usage in bytes (300GB)
     max_memory = int(3e11)
