@@ -113,7 +113,7 @@ if __name__ == "__main__":
     model_version = "2D_versatile_he"  # model from Stardist
     level = 0  # Pyramidal level: 0 = max resolution and 1 = min resolution
     separate_stains = None
-    run_stardist = False  # run stardist or load masks
+    run_stardist = True  # run stardist or load masks
 
     # ----------------------------------
 
