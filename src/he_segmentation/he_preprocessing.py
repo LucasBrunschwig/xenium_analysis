@@ -72,9 +72,13 @@ def preprocess_he(img_: np.ndarray, square_size_: int, model_version_: str, sepa
 
     coord = details["coord"]
 
-    print(f"Saving masks to: he_masks_stardist_{square_size_}.pkl")
+    results = f"he_masks_stardist_{square_size_}.pkl"
+    if separate_stain_:
+        results = results[:-4] + separate_stain_ + ".pkl"
 
-    with open(RESULTS / f"he_masks_stardist_{square_size_}.pkl", "wb") as file:
+    print(f"Saving masks to: {results}")
+
+    with open(RESULTS / results, "wb") as file:
         pickle.dump(coord, file)
 
     return coord
@@ -83,25 +87,34 @@ def preprocess_he(img_: np.ndarray, square_size_: int, model_version_: str, sepa
 def load_he_masks(path_: Path, model_version_, square_size_, visualize: bool = False, og_image: np.ndarray = None):
 
     with open(path_ / f"he_masks_stardist_{square_size_}.pkl", "rb") as file:
-        masks = pickle.load(file)
+        masks_ = pickle.load(file)
 
-    masks = build_stardist_mask_outlines(masks)
-
-
+    masks_ = build_stardist_mask_outlines(masks_)
 
     if visualize:
         if og_image is None:
             raise ValueError("Visualization expects the original image")
         viz_path = path_ / "viz"
         os.makedirs(viz_path, exist_ok=True)
-        plt.figure()
-        plt.imshow(image)
-        for mask in masks:
-            plt.scatter(mask[0, :], mask[1, :])
 
+        x_range = [image.shape[0] // 2 - 200, image.shape[0] // 2 + 200]
+        y_range = [image.shape[1] // 2 - 200, image.shape[1] // 2 + 200]
+
+        plt.figure()
+        plt.imshow(image[x_range[0]:x_range[1], y_range[0]:y_range[1]])
+        for mask in masks_:
+            if check_ranges(mask, x_range, y_range):
+                x = mask[0, :] - x_range[0]
+                y = mask[1, :] - y_range[0]
+                plt.plot(x, y, 'r', linewidth=.8)
         plt.savefig(viz_path / f"he_masks_stardist_{square_size_}.png")
 
-    return masks
+    return masks_
+
+
+def check_ranges(mask, x_range, y_range):
+    return ((x_range[0] < mask[0, :].max() < x_range[1] or x_range[0] < mask[0, :].min() < x_range[1]) and
+            (y_range[0] < mask[1, :].max() < y_range[1] or y_range[0] < mask[1, :].min() < y_range[1]))
 
 
 if __name__ == "__main__":
@@ -109,10 +122,10 @@ if __name__ == "__main__":
     # Scripts Parameters
     # ----------------------------------
 
-    square_size = None  # The size of the image (from center)
+    square_size = None # The size of the image (from center)
     model_version = "2D_versatile_he"  # model from Stardist
     level = 0  # Pyramidal level: 0 = max resolution and 1 = min resolution
-    separate_stains = None
+    separate_stains = "hematoxylin"
     run_stardist = True  # run stardist or load masks
 
     # ----------------------------------
@@ -128,12 +141,12 @@ if __name__ == "__main__":
     print(metadata)
 
     # Transform into a patch of the image
-    image, boundaries = image_patch(image, square_size_=square_size)
+    image, boundaries = image_patch(image, square_size_=square_size, type_="HE")
 
     # Run Stardist Segmentation or load masks
     if run_stardist:
         masks = preprocess_he(image, square_size_=square_size, model_version_=model_version, separate_stain_=separate_stains)
     else:
-        masks = load_he_masks(RESULTS, model_version, square_size, visualize=True, og_image = image)
+        masks = load_he_masks(RESULTS, model_version, square_size, visualize=True, og_image=image)
 
 

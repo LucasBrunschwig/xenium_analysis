@@ -1,0 +1,33 @@
+FROM --platform=linux/amd64 nvidia/cuda:12.3.0-base-ubuntu20.04
+
+# Do all tasks to be done with root privileged
+RUN apt-get update && apt-get install -y wget unzip && \
+    apt-get clean  && rm -rf /var/lib/apt/lists/*
+
+## Switch to the local user
+RUN groupadd -r upwaszak && useradd -r -g upwaszak lbrunsch
+USER lbrunsch
+WORKDIR /home/lbrunsch
+
+## Install conda in your home
+RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh  \
+    && bash ~/miniconda.sh -b -p $HOME/miniconda \
+    && rm ~/miniconda.sh
+
+# Add miniconda to path
+ENV PATH /home/lbrunsch/miniconda/bin:${PATH}
+
+## Create a conda env with required packages and Python 3.8
+RUN conda install mamba -n base -c conda-forge -y
+RUN mamba create -n venv python=3.8 -y
+RUN /bin/bash -c "source activate venv && pip install numpy matplotlib pandas scikit-image tiffile scikit-image anndata scanpy squidpy torch"
+RUN echo "source activate venv" > ~/.bashrc
+ENV PATH /home/lbrunsch/.conda/envs/venv/bin:$PATH
+
+# Install Baysor and add exec to path
+RUN mkdir /home/lbrunsch/baysor && \
+    wget https://github.com/kharchenkolab/Baysor/releases/download/v0.6.2/baysor-x86_x64-linux-v0.6.2_build.zip -O /home/lbrunsch/baysor/baysor.zip && \
+    unzip /home/lbrunsch/baysor/baysor.zip -d /home/lbrunsch/baysor && \
+    rm  /home/lbrunsch/baysor/baysor.zip
+
+ENV PATH /home/lbrunsch/baysor/bin/baysor/bin:${PATH}

@@ -268,7 +268,7 @@ def load_image(path_replicate: Path, img_type: str, level_: int = 0):
     return image
 
 
-def image_patch(img_array_, square_size_: int = 400, format_: str = "test", orig_: tuple = None):
+def image_patch(img_array_, type_: str, square_size_: int = 400, orig_: tuple = None):
     """
 
     Parameters
@@ -285,41 +285,43 @@ def image_patch(img_array_, square_size_: int = 400, format_: str = "test", orig
 
     """
 
-    # if patch is false return the original image with its boundaries
+    # if patch is false return the original image with its shape
     if square_size_ is None:
         if len(img_array_.shape) == 2:
             return [img_array_, [[0, img_array_.shape[0]], [0, img_array_.shape[1]]]]
         else:
             return [img_array_, [[0, img_array_.shape[0]], [0, img_array_.shape[1]], [0, img_array_.shape[2]]]]
 
-    if len(img_array_.shape) == 2:
+    if type_ == "HE":
         coord_1, coord_2 = 0, 1
+    elif type_ == "DAPI":
+        if len(img_array_.shape) == 2:
+            coord_1, coord_2 = 0, 1
+        else:
+            coord_1, coord_2 = 1, 2
     else:
-        coord_1, coord_2 = 1, 2
+        raise ValueError("Unknown Image Type")
 
     # if no coordinates take the center
     if orig_ is None:
-
         l_t = img_array_.shape[coord_1] // 2 - square_size_ // 2
         r_t = img_array_.shape[coord_1] // 2 + square_size_ // 2
         l_b = img_array_.shape[coord_2] // 2 - square_size_ // 2
         r_b = img_array_.shape[coord_2] // 2 + square_size_ // 2
+
     # use specified coordinates
     else:
-        l_t = orig_[coord_1]
-        r_t = orig_[coord_1] + square_size_
-        l_b = orig_[coord_2]
-        r_b = orig_[coord_2] + square_size_
+        l_t = orig_[coord_1] - square_size_ // 2
+        r_t = orig_[coord_1] + square_size_ // 2
+        l_b = orig_[coord_2] - square_size_ // 2
+        r_b = orig_[coord_2] + square_size_ // 2
 
-    if format_ == "test":
-        if len(img_array_.shape) == 2:
-            return [img_array_[l_t:r_t,l_b:r_b],
-                    ([l_t, r_t], [l_b, r_b])]
-        else:
-            return [img_array_[:, l_t:r_t, l_b:r_b],
-                    ([0, l_t, r_t], [img_array_.shape[0], l_b, r_b])]
-    elif format_ == "train":
-        raise ValueError("Not implemented yet")
+    if len(img_array_.shape) == 2 or type_ == "HE":
+        return [img_array_[l_t:r_t, l_b:r_b], ([l_t, r_t], [l_b, r_b])]
+    else:
+        return [img_array_[:, l_t:r_t, l_b:r_b],
+                ([0, l_t, r_t], [img_array_.shape[0], l_b, r_b])]
+
 
 
 def check_gpu():
