@@ -156,7 +156,7 @@ if __name__ == "__main__":
     print(metadata)
 
     # Transform into a patch of the image
-    image, boundaries = image_patch(image, square_size_=square_size, type_="HE")
+    #image, boundaries = image_patch(image, square_size_=square_size, type_="HE")
 
     # Run Stardist Segmentation or load masks
     if run_stardist:
