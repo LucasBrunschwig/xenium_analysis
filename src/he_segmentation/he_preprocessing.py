@@ -42,19 +42,19 @@ def build_result_dir():
     os.makedirs(RESULTS, exist_ok=True)
 
 
-def preprocess_he(img_: np.ndarray, square_size_: int, model_version_: str, separate_stain_: str = None,
+def preprocess_he(img_: np.ndarray, square_size_: int, model_version_: str, stain_: str = None,
                   prob_thrsh_: float = None, nms_thrsh_: float = None):
 
     # ------------------------------------------------------------------------------ #
 
-    if separate_stain_:
+    if stain_:
         # Extracted From QuPath
         stains = np.array([[0.651, 0.701, 0.29], [0.216, 0.801, 0.558]])
         h_and_e = separate_stains(img_, stains)
         hematoxylin = rescale_intensity(h_and_e[:, :, 0], out_range=(0, 255))
         eosin = rescale_intensity(h_and_e[:, :, 1], out_range=(0, 255))
 
-        if separate_stain_ == "hematoxylin":
+        if stain_ == "hematoxylin":
             img_ = hematoxylin
         else:
             img_ = eosin
@@ -73,8 +73,8 @@ def preprocess_he(img_: np.ndarray, square_size_: int, model_version_: str, sepa
     coord = details["coord"]
 
     results = f"he_masks_stardist_{square_size_}.pkl"
-    if separate_stain_:
-        results = results[:-4] + separate_stain_ + ".pkl"
+    if stain_:
+        results = results[:-4] + stain_ + ".pkl"
 
     print(f"Saving masks to: {results}")
 
@@ -125,7 +125,7 @@ if __name__ == "__main__":
     square_size = None # The size of the image (from center)
     model_version = "2D_versatile_he"  # model from Stardist
     level = 0  # Pyramidal level: 0 = max resolution and 1 = min resolution
-    separate_stains = "hematoxylin"
+    stains = "hematoxylin"
     run_stardist = True  # run stardist or load masks
 
     # ----------------------------------
@@ -145,7 +145,7 @@ if __name__ == "__main__":
 
     # Run Stardist Segmentation or load masks
     if run_stardist:
-        masks = preprocess_he(image, square_size_=square_size, model_version_=model_version, separate_stain_=separate_stains)
+        masks = preprocess_he(image, square_size_=square_size, model_version_=model_version, stain_=stains)
     else:
         masks = load_he_masks(RESULTS, model_version, square_size, visualize=True, og_image=image)
 
