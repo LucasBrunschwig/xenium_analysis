@@ -67,7 +67,7 @@ def preprocess_he(img_: np.ndarray, square_size_: int, model_version_: str, stai
 
     # Perform Stardist H&E
     model = StarDist2D.from_pretrained(model_version_)
-    img_normalized = normalize(img_, 1, 99)
+    img_normalized = normalize(img_, 1,99.8, axis=(0, 1))
 
     labels, details = model.predict_instances(img_normalized, prob_thresh=prob_thrsh_, nms_thresh=nms_thrsh_,
                                               n_tiles=n_tiles)
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     square_size = None  # The size of the image (from center)
     model_version = "2D_versatile_he"  # model from Stardist
     level = 0  # Pyramidal level: 0 = max resolution and 1 = min resolution
-    stains = "hematoxylin"
+    stains = None
     run_stardist = True  # run stardist or load masks
 
     # ----------------------------------
