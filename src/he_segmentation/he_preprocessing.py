@@ -134,9 +134,6 @@ def check_ranges(mask, x_range, y_range):
 
 if __name__ == "__main__":
 
-   # img = tifffile.imread("/Users/lbrunsch/Downloads/MoNuSeg 2018 Training Data/Tissue Images/TCGA-UZ-A9PN-01Z-00-DX1.tif")
-   # with tifffile.TiffFile("/Users/lbrunsch/Downloads/MoNuSeg 2018 Training Data/Tissue Images/TCGA-UZ-A9PN-01Z-00-DX1.tif") as tif:
-   #     x = 2
     # Scripts Parameters
     # ----------------------------------
 
