@@ -27,10 +27,10 @@ def build_stardist_mask_outlines(masks):
     for mask in masks:
         mask = mask.astype(int)
         mask = np.concatenate((mask, mask[:, 0].reshape((2, 1))), axis=1)
-        tmp_1 = mask[0, :].copy()
-        tmp_2 = mask[1, :].copy()
-        mask[0, :] = tmp_2
-        mask[1, :] = tmp_1
+        #tmp_1 = mask[0, :].copy()
+        #tmp_2 = mask[1, :].copy()
+        #mask[0, :] = tmp_2
+        #mask[1, :] = tmp_1
         masks_outlines.append(mask)
 
     return masks_outlines
@@ -46,7 +46,7 @@ def preprocess_he(img_: np.ndarray, square_size_: int, model_version_: str, stai
                   prob_thrsh_: float = None, nms_thrsh_: float = None):
 
     # ------------------------------------------------------------------------------ #
-
+    n_tiles = (3, 3, 1)
     if stain_:
         # Extracted From QuPath
         stains = np.array([[0.651, 0.701, 0.29], [0.216, 0.801, 0.558]])
@@ -59,6 +59,8 @@ def preprocess_he(img_: np.ndarray, square_size_: int, model_version_: str, stai
         else:
             img_ = eosin
 
+        n_tiles = (3, 3)
+
     # ------------------------------------------------------------------------------ #
 
     print(f"Running Stardist: {model_version_}, h&e {square_size}")
@@ -68,7 +70,7 @@ def preprocess_he(img_: np.ndarray, square_size_: int, model_version_: str, stai
     img_normalized = normalize(img_, 1, 99)
 
     labels, details = model.predict_instances(img_normalized, prob_thresh=prob_thrsh_, nms_thresh=nms_thrsh_,
-                                              n_tiles=(3, 3, 1))
+                                              n_tiles=n_tiles)
 
     coord = details["coord"]
 
@@ -113,8 +115,8 @@ def load_he_masks(path_: Path, model_version_, square_size_, visualize: bool = F
 
 
 def check_ranges(mask, x_range, y_range):
-    return ((x_range[0] < mask[0, :].max() < x_range[1] or x_range[0] < mask[0, :].min() < x_range[1]) and
-            (y_range[0] < mask[1, :].max() < y_range[1] or y_range[0] < mask[1, :].min() < y_range[1]))
+    return ((x_range[0] < mask[0, :].max() < x_range[1] and x_range[0] < mask[0, :].min() < x_range[1]) and
+            (y_range[0] < mask[1, :].max() < y_range[1] and y_range[0] < mask[1, :].min() < y_range[1]))
 
 
 if __name__ == "__main__":
@@ -126,7 +128,7 @@ if __name__ == "__main__":
     model_version = "2D_versatile_he"  # model from Stardist
     level = 0  # Pyramidal level: 0 = max resolution and 1 = min resolution
     stains = "hematoxylin"
-    run_stardist = True  # run stardist or load masks
+    run_stardist = False  # run stardist or load masks
 
     # ----------------------------------
 
