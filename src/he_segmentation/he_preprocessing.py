@@ -68,7 +68,7 @@ def preprocess_he(img_: np.ndarray, square_size_: int, model_version_: str, stai
 
     # Perform Stardist H&E
     model = StarDist2D.from_pretrained(model_version_)
-    img_normalized = normalize(img_, 1,99.8, axis=(0, 1))
+    img_normalized = normalize(img_, 1, 99.8, axis=(0, 1))
 
     labels, details = model.predict_instances(img_normalized, prob_thresh=prob_thrsh_, nms_thresh=nms_thrsh_,
                                               n_tiles=n_tiles)
