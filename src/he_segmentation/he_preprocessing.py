@@ -124,11 +124,11 @@ if __name__ == "__main__":
     # Scripts Parameters
     # ----------------------------------
 
-    square_size = None # The size of the image (from center)
+    square_size = None  # The size of the image (from center)
     model_version = "2D_versatile_he"  # model from Stardist
     level = 0  # Pyramidal level: 0 = max resolution and 1 = min resolution
     stains = "hematoxylin"
-    run_stardist = False  # run stardist or load masks
+    run_stardist = True  # run stardist or load masks
 
     # ----------------------------------
 
