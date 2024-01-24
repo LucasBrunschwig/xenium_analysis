@@ -55,7 +55,7 @@ def preprocess_he(img_: np.ndarray, square_size_: int, model_version_: str, sepa
     print(f"Saving masks to: he_masks_stardist_{square_size_}.pkl")
 
     with open(RESULTS / f"he_masks_stardist_{square_size_}.pkl", "wb") as file:
-        pickle.dump(file, coord)
+        pickle.dump(coord, file)
 
     return coord
 
