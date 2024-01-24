@@ -48,7 +48,8 @@ def preprocess_he(img_: np.ndarray, square_size_: int, model_version_: str, sepa
     model = StarDist2D.from_pretrained(model_version_)
     img_normalized = normalize(img_, 1, 99)
 
-    labels, details = model.predict_instances(img_normalized, prob_thresh=prob_thrsh_, nms_thresh=nms_thrsh_)
+    labels, details = model.predict_instances(img_normalized, prob_thresh=prob_thrsh_, nms_thresh=nms_thrsh_,
+                                              n_tiles=(3, 3))
 
     coord = details["coord"]
 
@@ -69,7 +70,7 @@ if __name__ == "__main__":
     # Scripts Parameters
     # ----------------------------------
 
-    square_size = 8000  # The size of the image (from center)
+    square_size = None  # The size of the image (from center)
     model_version = "2D_versatile_he"  # model from Stardist
     level = 0  # Pyramidal level: 0 = max resolution and 1 = min resolution
     separate_stains = None
