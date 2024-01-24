@@ -10,6 +10,7 @@ import numpy as np
 from skimage.color import separate_stains
 from skimage.exposure import rescale_intensity
 from csbdeep.utils import normalize
+from tifffile import tifffile
 
 # Relative Imports
 from src.utils import load_xenium_he_ome_tiff, get_human_breast_he_path, get_results_path, image_patch
@@ -27,10 +28,10 @@ def build_stardist_mask_outlines(masks):
     for mask in masks:
         mask = mask.astype(int)
         mask = np.concatenate((mask, mask[:, 0].reshape((2, 1))), axis=1)
-        #tmp_1 = mask[0, :].copy()
-        #tmp_2 = mask[1, :].copy()
-        #mask[0, :] = tmp_2
-        #mask[1, :] = tmp_1
+        tmp_1 = mask[0, :].copy()
+        tmp_2 = mask[1, :].copy()
+        mask[0, :] = tmp_2
+        mask[1, :] = tmp_1
         masks_outlines.append(mask)
 
     return masks_outlines
@@ -46,7 +47,7 @@ def preprocess_he(img_: np.ndarray, square_size_: int, model_version_: str, stai
                   prob_thrsh_: float = None, nms_thrsh_: float = None):
 
     # ------------------------------------------------------------------------------ #
-    n_tiles = (3, 3, 1)
+    n_tiles = (15, 19, 1)
     if stain_:
         # Extracted From QuPath
         stains = np.array([[0.651, 0.701, 0.29], [0.216, 0.801, 0.558]])
@@ -99,19 +100,31 @@ def load_he_masks(path_: Path, model_version_, square_size_, visualize: bool = F
         viz_path = path_ / "viz"
         os.makedirs(viz_path, exist_ok=True)
 
-        x_range = [image.shape[0] // 2 - 200, image.shape[0] // 2 + 200]
-        y_range = [image.shape[1] // 2 - 200, image.shape[1] // 2 + 200]
+        ranges = [(10908, 1539), (1212, 1539), (7676, 13854), (4444, 1539), (1212, 7696),  (1212, 13854),
+                  (10908, 7696), (4444, 7696), (4444, 13854), (7676, 7696)]
 
-        plt.figure()
-        plt.imshow(image[x_range[0]:x_range[1], y_range[0]:y_range[1]])
-        for mask in masks_:
-            if check_ranges(mask, x_range, y_range):
-                x = mask[0, :] - x_range[0]
-                y = mask[1, :] - y_range[0]
-                plt.plot(x, y, 'r', linewidth=.8)
-        plt.savefig(viz_path / f"he_masks_stardist_{square_size_}.png")
+        for range in ranges:
+            x_range = [range[0] - 300, range[0] + 300]
+            y_range = [range[1] - 300, range[1] + 300]
+            save_path = viz_path / f"he_masks_stardist_{square_size_}_{x_range[0]}_{y_range[0]}.png"
+            plot_region(image, masks_, x_range, y_range, save_path)
 
     return masks_
+
+
+def plot_region(image, masks_, x_range, y_range, save_path):
+
+    plt.figure()
+    plt.imshow(image[x_range[0]:x_range[1], y_range[0]:y_range[1]])
+    plt.axis("off")
+
+    for mask in masks_:
+        if check_ranges(mask, x_range, y_range):
+            x = mask[0, :] - x_range[0]
+            y = mask[1, :] - y_range[0]
+            plt.plot(x, y, 'r', linewidth=.8)
+
+    plt.savefig(save_path, dpi=1000)
 
 
 def check_ranges(mask, x_range, y_range):
@@ -120,6 +133,8 @@ def check_ranges(mask, x_range, y_range):
 
 
 if __name__ == "__main__":
+
+    img = tifffile.imread()
 
     # Scripts Parameters
     # ----------------------------------
