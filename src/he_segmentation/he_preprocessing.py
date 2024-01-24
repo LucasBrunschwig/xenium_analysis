@@ -3,11 +3,16 @@ import os
 from pathlib import Path
 
 # Third Party
-import tifffile
-import xml.etree.ElementTree as ET
-import xmltodict
+import matplotlib.pyplot as plt
+import numpy as np
+from skimage.color import separate_stains
+from skimage.exposure import rescale_intensity
+from stardist.models import StarDist2D
+from csbdeep.utils import normalize
+
+
 # Relative Imports
-from src.utils import load_ome_tiff, get_human_breast_he_path, get_results_path, image_patch
+from src.utils import load_xenium_he_ome_tiff, get_human_breast_he_path, get_results_path, image_patch
 
 RESULTS = Path()
 
@@ -15,24 +20,33 @@ RESULTS = Path()
 def build_result_dir():
     global RESULTS
     RESULTS = get_results_path() / "he_preprocessing"
-
     os.makedirs(RESULTS, exist_ok=True)
 
 
-def xml_to_dict(element):
-    if len(element) == 0:
-        return element.text
-    result = {}
-    for child in element:
-        child_data = xml_to_dict(child)
-        if child.tag in result:
-            if type(result[child.tag]) is list:
-                result[child.tag].append(child_data)
-            else:
-                result[child.tag] = [result[child.tag], child_data]
-        else:
-            result[child.tag] = child_data
-    return result
+def preprocess_he(img_: np.ndarray, separate_stain: bool = False):
+
+    if separate_stain:
+        # Extracted From QuPath
+        stains = np.array([[0.651, 0.701, 0.29], [0.216, 0.801, 0.558]])
+        h_and_e = separate_stains(img_, stains)
+        hematoxylin = rescale_intensity(h_and_e[:, :, 0], out_range=(0, 255))
+        eosin = rescale_intensity(h_and_e[:, :, 1], out_range=(0, 255))
+
+    # Perform Stardist H&E
+    model_type_ = "2D_versatile_he"
+    print(img_.shape)
+    model = StarDist2D.from_pretrained(model_type_)
+    img_normalized = normalize(img_, 1, 99.8)
+    prob_thrsh = None
+    nms_thrsh = None
+
+    print(img_.shape)
+
+    labels, details = model.predict_instances(img_normalized, prob_thresh=prob_thrsh, nms_thresh=nms_thrsh,)
+
+    coord = details["coord"]
+
+    return coord
 
 
 if __name__ == "__main__":
@@ -43,20 +57,12 @@ if __name__ == "__main__":
 
     ome_tiff = human_breast_he_path / "additional" / "Xenium_FFPE_Human_Breast_Cancer_Rep1_he_image.ome.tif"
 
-    with tifffile.TiffFile(ome_tiff) as tif:
-        print(f"Number of series: {len(tif.series)}")
-        series = tif.series[0]
-        image = series.asarray()
-        metadata = xmltodict.parse(tif.ome_metadata, attr_prefix='')['OME']
-        print(metadata)
+    image, metadata = load_xenium_he_ome_tiff(ome_tiff, level_=0)
+    print(metadata)
 
-    # This holds because there is only one series ! With multiple series
-    dimension_order = metadata["Image"]["Pixels"]["DimensionOrder"]
-    physical_size_x = float(metadata["Image"]["Pixels"]["PhysicalSizeX"])
-    physical_size_y = float(metadata["Image"]["Pixels"]["PhysicalSizeY"])
-    pyramidal = {}
-    for key, dimensions in enumerate(metadata["StructuredAnnotations"]["MapAnnotation"]["Value"]["M"]):
-        pyramidal[key] = [int(el) for el in dimensions["#text"].split(" ")]
-    custom_metadata = {"dimension": dimension_order, "x_size": physical_size_x, "y_size": physical_size_y,
-                       "levels": pyramidal}
+    image, boundaries = image_patch(image, square_size_=1000)
+
+    preprocess_he(image)
+
+
 

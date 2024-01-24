@@ -365,9 +365,9 @@ def get_human_breast_he_path():
 
 def load_xenium_he_ome_tiff(path: Path, level_):
 
-    print("")
+    print(f"Loading: {path.name}, level={level_}")
     with tifffile.TiffFile(path) as tif:
-        print(f"Number of series: {len(tif.series)}")
+        print(f"\tNumber of series: {len(tif.series)}")
         image = tif.series[0].levels[level_].asarray()
         metadata = xmltodict.parse(tif.ome_metadata, attr_prefix='')['OME']
 
@@ -381,6 +381,6 @@ def load_xenium_he_ome_tiff(path: Path, level_):
     custom_metadata = {"dimension": dimension_order, "x_size": physical_size_x, "y_size": physical_size_y,
                        "levels": pyramidal}
 
-    print("Warning: missing information about color channels")
+    print("\tWarning: missing information about color channels")
 
     return image, custom_metadata

@@ -13,7 +13,6 @@ import logging
 import platform
 from stardist.models import StarDist2D, StarDist3D
 from csbdeep.utils import normalize
-from itertools import product
 
 
 if platform.system() != "Windows":
@@ -181,8 +180,6 @@ def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: s
         plt.savefig(RESULTS / f"stardist_2d_optimization_{image_type_}_{model_type_}_{square_size}_"
                               f"({x_range[0]}-{y_range[0]}).png")
         plt.close()
-
-
 
 
 def run_patch_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: str,
