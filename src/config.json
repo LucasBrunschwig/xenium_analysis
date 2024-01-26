@@ -6,5 +6,7 @@
   "human_breast_replicate_1": "Xenium_FFPE_Human_Breast_Cancer_Rep1",
   "nucleus_segmentation": "nucleus_segmentation",
   "nuclear_features": "nucleus_features",
-  "cell_segmentation": "cell_segmentation"
+  "cell_segmentation": "cell_segmentation",
+  "human_breast_dapi_resolution": "0.2125",
+  "human_breast_h&e_resolution": "0.36378"
 }

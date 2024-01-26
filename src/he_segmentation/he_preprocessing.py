@@ -119,9 +119,9 @@ def plot_region(image, masks_, x_range, y_range, save_path):
     plt.axis("off")
 
     for mask in masks_:
-        if check_ranges(mask, x_range, y_range):
-            x = mask[0, :] - x_range[0]
-            y = mask[1, :] - y_range[0]
+        if check_ranges(mask, y_range, x_range):
+            x = mask[0, :] - y_range[0]
+            y = mask[1, :] - x_range[0]
             plt.plot(x, y, 'r', linewidth=.8)
 
     plt.savefig(save_path, dpi=1000)
@@ -141,7 +141,7 @@ if __name__ == "__main__":
     model_version = "2D_versatile_he"  # model from Stardist
     level = 0  # Pyramidal level: 0 = max resolution and 1 = min resolution
     stains = None
-    run_stardist = True  # run stardist or load masks
+    run_stardist = False  # run stardist or load masks
 
     # ----------------------------------
 
