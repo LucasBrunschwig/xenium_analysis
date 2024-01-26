@@ -96,9 +96,14 @@ def compare_nuclei(img_he_, img_he_cropped_scaled_, img_he_aligned_, scale_facto
                                                    position_cropped[1] - square_size_scaled:position_cropped[1] + square_size_scaled])
         axs[indices].set_title("Cropped-Scaled Image")
 
+        transform_matrix = np.array([[0.999466604064691, 0.005119841279342, -31.485396983163184],
+                                     [-0.005024121311802, 1.000125672401803, 22.629295815166188]])
+
+        position_aligned = [int(el) for el in np.matmul(transform_matrix, np.array(position_cropped + [1]))]
+
         indices = 2 if len(positions_) == 1 else (i, 2)
-        axs[indices].imshow(img_he_aligned_[position_cropped[0] - square_size_scaled:position_cropped[0] + square_size_scaled,
-                                            position_cropped[1] - square_size_scaled:position_cropped[1] + square_size_scaled])
+        axs[indices].imshow(img_he_aligned_[position_aligned[0] - square_size_scaled:position_aligned[0] + square_size_scaled,
+                                            position_aligned[1] - square_size_scaled:position_aligned[1] + square_size_scaled])
         axs[indices].set_title("Aligned Image")
 
     plt.tight_layout()
