@@ -1,10 +1,11 @@
+import os
 from pathlib import Path
 from typing import Callable
 import platform
 import pickle
 
 import matplotlib.pyplot as plt
-
+import numpy as np
 
 if platform.system() == "Linux":
     from .. import utils as src_utils
@@ -16,7 +17,21 @@ else:
     WORKING_DIR = Path("../../..")
 
 
-def get_xenium_nucleus_boundaries(path_replicate_: Path, boundaries: list = None):
+def get_xenium_nucleus_boundaries(path_replicate_: Path, boundaries: list = None, scale: float = 1.0, save: bool = False):
+
+    if boundaries is not None:
+        save_path = path_replicate_ / (f"nucleus_boundaries_pixel_x1-{boundaries[0][0]}_x2-{boundaries[0][1]}"
+                                       f"_y1-{boundaries[1][0]}_y2-{boundaries[1][1]}_{scale}.pkl")
+    else:
+        save_path = path_replicate_ / f"nucleus_boundaries_pixel_{scale}.pkl"
+
+    if os.path.isfile(save_path):
+        with open(save_path, "rb") as file:
+            return pickle.load(file)
+
+    if not save:
+        save_path = None
+
 
     adata = src_utils.load_xenium_data(Path(str(path_replicate_) + ".h5ad"))
 
@@ -25,25 +40,34 @@ def get_xenium_nucleus_boundaries(path_replicate_: Path, boundaries: list = None
     # from_metadata 1 pixel = 0.2125 microns
     x_conversion = 0.2125
     y_conversion = 0.2125
+
     adata.uns["nucleus_boundaries"]["vertex_y_pixel"] = adata.uns["nucleus_boundaries"]["vertex_y"].apply(
         lambda p: round(p/y_conversion))
     adata.uns["nucleus_boundaries"]["vertex_x_pixel"] = adata.uns["nucleus_boundaries"]["vertex_x"].apply(
         lambda p: round(p/x_conversion))
 
-    if boundaries is None:
+    if boundaries is not None:
+
+        # Selection of segmented nucleus that are inside the patch
+        pix_boundaries = adata.uns["nucleus_boundaries"][(adata.uns["nucleus_boundaries"]["vertex_x_pixel"] > boundaries[1][0]) &
+                                                         (adata.uns["nucleus_boundaries"]["vertex_x_pixel"] < boundaries[1][1]) &
+                                                         (adata.uns["nucleus_boundaries"]["vertex_y_pixel"] > boundaries[0][0]) &
+                                                         (adata.uns["nucleus_boundaries"]["vertex_y_pixel"] < boundaries[0][1])
+                                                         ]
+    else:
+        pix_boundaries = adata.uns["nucleus_boundaries"]
         boundaries = [[0, max(adata.uns["nucleus_boundaries"]["vertex_y"])],
                       [0, max(adata.uns["nucleus_boundaries"]["vertex_x"])]]
 
-    # Selection of segmented nucleus that are inside the patch
-    pix_boundaries = adata.uns["nucleus_boundaries"][(adata.uns["nucleus_boundaries"]["vertex_x_pixel"] > boundaries[1][0]) &
-                                                     (adata.uns["nucleus_boundaries"]["vertex_x_pixel"] < boundaries[1][1]) &
-                                                     (adata.uns["nucleus_boundaries"]["vertex_y_pixel"] > boundaries[0][0]) &
-                                                     (adata.uns["nucleus_boundaries"]["vertex_y_pixel"] < boundaries[0][1])
-                                                     ]
-    output = [[], []]
+    output = []
     for cell_seg in pix_boundaries["cell_id"].unique():
-        output[0].append(pix_boundaries[pix_boundaries["cell_id"] == cell_seg]["vertex_x_pixel"].to_numpy() - boundaries[1][0])
-        output[1].append(pix_boundaries[pix_boundaries["cell_id"] == cell_seg]["vertex_y_pixel"].to_numpy() - boundaries[0][0])
+        x = (pix_boundaries[pix_boundaries["cell_id"] == cell_seg]["vertex_x_pixel"].to_numpy() - boundaries[1][0])*scale
+        y = (pix_boundaries[pix_boundaries["cell_id"] == cell_seg]["vertex_y_pixel"].to_numpy() - boundaries[0][0])*scale
+        output.append(np.vstack((x, y)))
+
+    if save_path:
+        with open(save_path, "wb") as file:
+            pickle.dump(output, file)
 
     return output
 
@@ -63,6 +87,9 @@ def get_masks(method: str, params: dict, img_type_: str, square_size_: int = Non
             print(f"Error: {e}")
             print(f"CellPose masks with: {params}, image type-{img_type_} and square_size-{square_size_} does not"
                   f" exist")
+    else:
+        raise ValueError("Method not implemented")
+
     return masks
 
 

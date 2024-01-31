@@ -1,14 +1,13 @@
 
 # Std Library
 import os
-import pickle
-import platform
 from pathlib import Path
 
 # Third Party
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
+import tifffile
 
 # Relative Imports
 from src.utils import load_xenium_he_ome_tiff, get_human_breast_he_path, get_results_path, load_image
@@ -27,10 +26,10 @@ def relative_difference(list1, list2):
     return np.array(matrix)
 
 
-def template_matching(img_dapi, img_he, method_, scale_factor_):
+def template_matching(img_dapi, img_he, method_, scale_factor_, save_path_):
     method_f = eval(method_)
 
-    # Convert HE to gray scale
+    # Convert HE to gray scale and flip it vertically
     img_he_gray = cv2.cvtColor(img_he, cv2.COLOR_BGR2GRAY)
     img_he_gray = cv2.flip(img_he_gray, 0)
     new_dim = (int(img_he_gray.shape[1]*scale_factor_), int(img_he_gray.shape[0]*scale_factor_))
@@ -50,22 +49,30 @@ def template_matching(img_dapi, img_he, method_, scale_factor_):
     height, width = img_dapi_invert.shape[:2]
 
     img_he_aligned_ = cv2.flip(img_he, 0)[top_left_[1]:top_left_[1]+height, top_left_[0]:top_left_[0]+width]
-
+    img_he_gray = img_he_gray[top_left_[1]:top_left_[1]+height, top_left_[0]:top_left_[0]+width]
     fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(30, 10))
     [ax.axis("off") for ax in axs]
     axs[0].imshow(img_dapi)
     axs[1].imshow(img_he_aligned_)
     plt.tight_layout()
-    plt.savefig(RESULTS / f"alignment_{method_}.png")
+    plt.savefig(save_path_ / f"alignment_{method_}.png")
 
     if "COEFF" in method_:
-        cv2.imwrite(str(RESULTS / f"Human_Breast_Cancer_{method_}_he_image_crop_scale.png"), img_he_aligned_)
+        tifffile.imwrite(str(save_path_ / f"Human_Breast_Cancer_{method_}_he_image_crop_scale.tif"), img_he_gray)
 
     return img_he_aligned_, top_left_
 
 
+def segment_nuclei(img_, model_type, params_):
+    """
+    This function uses both images and run nuclei segmentation through stardist on highest resolution possible
+    """
+
+     # check if masks were already computed
+
+
 def compare_nuclei(img_he_, img_he_cropped_scaled_, img_he_aligned_, scale_factor_, crop_position, transform_,
-                   positions_, square_size_):
+                   positions_, square_size_, save_path_):
     """
     The goal of this function is to compare both image at similar location to observe how the nuclei shape
     is impacted by the various transformation. This is important since we are also interested in nuclear
@@ -110,8 +117,6 @@ def compare_nuclei(img_he_, img_he_cropped_scaled_, img_he_aligned_, scale_facto
     plt.savefig(RESULTS / "comparison_before_after_registration.png")
 
 
-
-
 def build_results_dir():
     global RESULTS
     RESULTS = get_results_path() / "he_alignment"
@@ -125,6 +130,7 @@ if __name__ == "__main__":
 
     level_he = 0
     level_dapi = 1
+    optimize_tm_methods = False
 
     # ----------------------------------
 
@@ -157,6 +163,11 @@ if __name__ == "__main__":
     print(f"Resolution {level_he}: {metadata['x_size']*(level_he+1)}")
     print()
 
+    he_hematoxylin = "/Users/lbrunsch/Desktop/deconvolved_hematoxylin.png"
+
+    print("Loading Hematoxylin...")
+    image_hematoxylin = cv2.imread(he_hematoxylin)
+
     # Use custom loading for DAPI
     print("Loading DAPI...")
     image_dapi = load_image(human_breast_path, img_type="mip", level_=level_dapi)
@@ -171,12 +182,15 @@ if __name__ == "__main__":
                'cv2.TM_SQDIFF_NORMED']
     scale_factor = 0.363788 / 0.425
 
-    # for method in methods:
-    #    print(f"Method {method}")
-    #    img_he_cropped_scaled, top_left = template_matching(image_dapi, image_he, method, scale_factor)
+    if optimize_tm_methods:
+        for method in methods:
+            print(f"Method {method}")
+            img_he_cropped_scaled, _ = template_matching(image_dapi, image_hematoxylin, method, scale_factor,
+                                                         save_path_=RESULTS)
 
     print("\tSelected_method: cv2.TM_CCOEFF")
-    image_he_cropped_scaled, top_left = template_matching(image_dapi, image_he, 'cv2.TM_CCOEFF', scale_factor)
+    image_he_cropped_scaled, top_left = template_matching(image_dapi, image_hematoxylin, 'cv2.TM_CCOEFF', scale_factor,
+                                                          save_path_=Path("/Users/lbrunsch/Desktop"))
 
     print("# ----------------------------------- #")
 
@@ -189,10 +203,10 @@ if __name__ == "__main__":
     print(f"\tpositions {positions}")
 
     square_size = 300
-    img_he_aligned = cv2.imread(str(RESULTS / "Human_Breast_Replicate1_HE_aligned.tif"))
+    img_he_aligned = cv2.imread(str(RESULTS / "Human_Breast_Replicate1_HE_aligned_test_.tif"))
     transform = None
     compare_nuclei(image_he, image_he_cropped_scaled, img_he_aligned, scale_factor, top_left, transform,
-                   positions, square_size)
+                   positions, square_size, RESULTS)
 
     print("# ----------------------------------- #")
 

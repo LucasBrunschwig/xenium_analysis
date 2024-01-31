@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import logging
 import platform
-from stardist.models import StarDist2D, StarDist3D
+#from stardist.models import StarDist2D, StarDist3D
 from csbdeep.utils import normalize
 
 
@@ -93,10 +93,6 @@ def build_stardist_mask_outlines(masks):
     for mask in masks:
         mask = mask.astype(int)
         mask = np.concatenate((mask, mask[:, 0].reshape((2, 1))), axis=1)
-        tmp_1 = mask[0, :].copy()
-        tmp_2 = mask[1, :].copy()
-        mask[0, :] = tmp_2
-        mask[1, :] = tmp_1
         masks_outlines.append(mask)
 
     return masks_outlines
