@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import logging
 import platform
-#from stardist.models import StarDist2D, StarDist3D
+from stardist.models import StarDist2D, StarDist3D
 from csbdeep.utils import normalize
 
 
