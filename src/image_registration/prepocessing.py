@@ -36,16 +36,22 @@ Implementations:
 """
 import pickle
 from typing import Optional
-
-import cv2
 import os
 from pathlib import Path
+
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import tifffile
-from scipy.ndimage import gaussian_filter
 from csbdeep.utils import normalize
 from stardist.models import StarDist2D
+from skimage.restoration import denoise_tv_chambolle
+from scipy.ndimage import gaussian_filter
+from skimage.feature import ORB, match_descriptors
+from skimage.transform import AffineTransform, warp
+from skimage.measure import ransac
+from src.nucleus_segmentation.segmentation_stardist import build_stardist_mask_outlines
+#from wsireg.wsireg2d import WsiReg2D
 
 from src.utils import load_xenium_he_ome_tiff, get_human_breast_he_path, get_results_path, load_image
 
@@ -61,11 +67,14 @@ def resize(img_, scale_factor_, interpolation: str = "cv2.INTERCUBIC"):
     return cv2.resize(img_, new_dim, interpolation=interpolation)
 
 
-def template_match(img_dapi, img_he, matching):
+def template_match(img_dapi, img_he, matching, padding: int = 1000, convert_gray: bool = True):
     matching = eval(matching)
 
     # Convert H&E to shades of gray
-    img_he_gray = cv2.cvtColor(img_he, cv2.COLOR_BGR2GRAY)
+    if convert_gray:
+        img_he_gray = cv2.cvtColor(img_he, cv2.COLOR_BGR2GRAY)
+    else:
+        img_he_gray = img_he
 
     # Scale dapi and invert
     img_dapi_scaled = cv2.normalize(img_dapi, None, 0, 255, cv2.NORM_MINMAX).astype('uint8')
@@ -78,7 +87,8 @@ def template_match(img_dapi, img_he, matching):
     height, width = img_dapi_invert.shape[:2]
 
     # Return matches template
-    img_he_aligned = crop_image(img_he, top_left, width, height)
+    img_he_aligned = crop_image(img_he, top_left[1]-padding, top_left[0]-padding,
+                                width+2*padding, height+2*padding)
 
     return img_he_aligned
 
@@ -101,12 +111,13 @@ def segment_stardist(
         model_type_: str,
         prob_thrsh: Optional[float],
         nms_thrsh: Optional[float],
+        n_tiles: tuple,
 ):
     model = StarDist2D.from_pretrained(model_type_)
 
     img_normalized = normalize(img, 1, 99.8, axis=(0, 1))
     labels, details = model.predict_instances(img_normalized, prob_thresh=prob_thrsh, nms_thresh=nms_thrsh,
-                                              n_tiles=(10, 10))
+                                              n_tiles=n_tiles)
 
     return labels, details
 
@@ -159,7 +170,7 @@ def test_resize(img_, dapi_res_0: float = 0.2125, dapi_res_1: float = 0.425, he_
         plt.close(fig)
 
 
-def test_noise_reduction(img_he_, img_dapi_, results_dir):
+def test_noise_reduction(img_he_, results_dir):
     """
     The goal is to visualize the impact of gaussian smoothing on the image if performed before or after resizing
 
@@ -180,10 +191,12 @@ def test_noise_reduction(img_he_, img_dapi_, results_dir):
 
     """
 
-    img_he_ = cv2.cvtColor(img_he, cv2.COLOR_BGR2GRAY)
+    img_he_ = cv2.cvtColor(img_he_, cv2.COLOR_BGR2GRAY)
 
     gaussian_noise_dir = results_dir / "test_gaussian_noise"
     os.makedirs(gaussian_noise_dir, exist_ok=True)
+
+    # Test Gaussian Blur Before Up-Sampling
 
     sigmas = [0.5, 1, 2, 3]
     method = "cv2.INTER_CUBIC"
@@ -220,7 +233,7 @@ def test_noise_reduction(img_he_, img_dapi_, results_dir):
     img_he_resized = resize(img_he_, scale_factor, method)
     for j, loc_ in enumerate(locations_resized):
         axs_resized[j, 0].imshow(img_he_resized[loc_[0] - sqr_resized:loc_[0] + sqr_resized,
-                                         loc_[1] - sqr_resized:loc_[1] + sqr_resized])
+                                                loc_[1] - sqr_resized:loc_[1] + sqr_resized])
 
     plt.tight_layout()
     fig.savefig(gaussian_noise_dir / "original_image_gaussian_smoothing.png")
@@ -229,7 +242,7 @@ def test_noise_reduction(img_he_, img_dapi_, results_dir):
     fig_resized.savefig(gaussian_noise_dir / "original_image_gaussian_smoothing_upscaled.png")
     plt.close(fig_resized)
 
-    # Assuming Up-sampling
+    # Test Gaussian Blur after Up-Sampling
 
     sigmas = [1, 2, 3]
 
@@ -261,35 +274,251 @@ def test_stardist_features_alignment(img_he_: np.ndarray, img_dapi_: np.ndarray,
         4. Run feature based alignment with nuclei centroid
         5. need to check how well this masks are aligned with the original cells
 
-        Questions: how many landmarks should we use? Should I visualize all of them?
+        Questions:
+            - how many landmarks should we use? Should I visualize all of them?
+            - should I consider the masks resolution here
     """
 
     save_masks = results_dir_ / "masks"
     os.makedirs(save_masks, exist_ok=True)
 
-    if not os.path.isfile(save_masks / "stardist_dapi_0_nms-None_thrsh-None.pkl"):
+    mask_path = save_masks / "results_stardist_dapi_0_nms-None_thrsh-None.pkl"
+
+    if not os.path.isfile(mask_path):
         model_type_fluo = "2D_versatile_fluo"
-        labels_dapi, masks_dapi = segment_stardist(img_dapi_, model_type_fluo, prob_thrsh=None, nms_thrsh=None)
-        masks_dapi = masks_dapi["coord"]
-        with open(save_masks / "stardist_dapi_0_nms-None_thrsh-None.pkl", 'wb') as file:
+        labels_dapi, masks_dapi = segment_stardist(img_dapi_, model_type_fluo, prob_thrsh=None, nms_thrsh=None,
+                                                   n_tiles=(10, 10))
+        with open(mask_path, 'wb') as file:
             pickle.dump(masks_dapi, file)
     else:
-        with open(save_masks / "stardist_dapi_0_nms-None_thrsh-None.pkl", 'rb') as file:
+        with open(mask_path, 'rb') as file:
             masks_dapi = pickle.load(file)
 
-    if not os.path.isfile(save_masks / "stardist_he_nms-None_thrsh-None.pkl"):
+    mask_path = save_masks / "results_stardist_he_nms-None_thrsh-None.pkl"
+
+    if not os.path.isfile(mask_path):
         model_type_he = "2D_versatile_he"
-        labels_he, masks_he = segment_stardist(img_he_, model_type_he, prob_thrsh=None, nms_thrsh=None)
-        masks_he = masks_he["coord"]
-        with open(save_masks / "stardist_he_nms-None_thrsh-None.pkl", 'wb') as file:
+        labels_he, masks_he = segment_stardist(img_he_, model_type_he, prob_thrsh=None, nms_thrsh=None,
+                                               n_tiles=(10, 10, 1))
+        with open(mask_path, 'wb') as file:
             pickle.dump(masks_he, file)
 
     else:
-        with open(save_masks / "stardist_dapi_0_nms-None_thrsh-None.pkl", 'rb') as file:
+        with open(mask_path, 'rb') as file:
             masks_dapi = pickle.load(file)
+
+    # Here I need to compute distances between pairs of point take the top x and print the region
+    # Probably needs to align image before with a rough estimate -> more complicated than anticipated
+
+
+def test_anisotropic_filter(img_he_, results_dir_):
+
+    img_he_ = cv2.cvtColor(img_he_, cv2.COLOR_BGR2GRAY)
+
+    gaussian_noise_dir = results_dir_ / "test_anisotropic_filter"
+    os.makedirs(gaussian_noise_dir, exist_ok=True)
+
+    # Test Gaussian Blur Before Up-Sampling
+
+    weights = [0.1, 0.3, 0.5]
+    method = "cv2.INTER_CUBIC"
+    sqr = 20
+    scale_factor = 0.3637 / 0.2125
+    sqr_resized = int(sqr * scale_factor)
+
+    locations = [[img_he_.shape[0] // 2, img_he_.shape[1] // 2], [9550, 7320], [10470, 17540]]
+    locations_resized = [[int(loc_[0] * scale_factor), int(loc_[1] * scale_factor)] for loc_ in locations]
+
+    fig, axs = plt.subplots(nrows=len(locations), ncols=len(weights)+1, figsize=(30, 15))
+    fig_resized, axs_resized = plt.subplots(nrows=len(locations), ncols=len(weights)+1, figsize=(30, 15))
+
+    [ax.axis("off") for ax in axs.ravel()]
+    [ax.axis("off") for ax in axs_resized.ravel()]
+
+    axs[0, 0].set_title("Original")
+    axs_resized[0, 0].set_title("Original")
+
+    for i, weight in enumerate(weights):
+        img_he_filtered = denoise_tv_chambolle(img_he_, weight)
+        img_he_filtered_resized = resize(img_he_filtered, scale_factor_=scale_factor, interpolation=method)
+        axs[0, i+1].set_title(f"iteration {weight}")
+        axs_resized[0, i+1].set_title(f"iteration {weight}")
+        for j, loc_ in enumerate(locations):
+            axs[j, i+1].imshow(img_he_filtered[loc_[0]-sqr:loc_[0]+sqr, loc_[1]-sqr:loc_[1]+sqr])
+        for j, loc_ in enumerate(locations_resized):
+            axs_resized[j, i+1].imshow(img_he_filtered_resized[loc_[0]-sqr_resized:loc_[0]+sqr_resized,
+                                                               loc_[1]-sqr_resized:loc_[1]+sqr_resized])
+
+    for j, loc_ in enumerate(locations):
+        axs[j, 0].imshow(img_he_[loc_[0] - sqr:loc_[0] + sqr, loc_[1] - sqr:loc_[1] + sqr])
+
+    img_he_resized = resize(img_he_, scale_factor, method)
+    for j, loc_ in enumerate(locations_resized):
+        axs_resized[j, 0].imshow(img_he_resized[loc_[0] - sqr_resized:loc_[0] + sqr_resized,
+                                                loc_[1] - sqr_resized:loc_[1] + sqr_resized])
+
+    plt.tight_layout()
+    fig.savefig(gaussian_noise_dir / "original_image_anisotropic.png")
+    plt.close(fig)
+    plt.tight_layout()
+    fig_resized.savefig(gaussian_noise_dir / "original_anisotropic_upscaled.png")
+    plt.close(fig_resized)
+
+
+def test_feature_based_registration(feature_image, search_image):
+
+    # Detect and extract features
+    orb = ORB(n_keypoints=500, fast_threshold=0.05)
+
+    orb.detect_and_extract(feature_image)
+    keypoints1 = orb.keypoints
+    descriptors1 = orb.descriptors
+
+    orb.detect_and_extract(search_image)
+    keypoints2 = orb.keypoints
+    descriptors2 = orb.descriptors
+
+    # Match features
+    matches = match_descriptors(descriptors1, descriptors2, cross_check=True)
+
+    # Select matched keypoints
+    src = keypoints2[matches[:, 1]][:, ::-1]
+    dst = keypoints1[matches[:, 0]][:, ::-1]
+
+    # Estimate the transformation model using RANSAC for robustness
+    model, inliers = ransac((src, dst), AffineTransform, min_samples=4,
+                            residual_threshold=2, max_trials=1000)
+
+    # Warp the moving image towards the fixed image
+    registered_image = warp(search_image, inverse_map=model.inverse, output_shape=feature_image.shape[:2])
+
+    return registered_image, model
+
+
+def test_wsireg(img_dapi_path_, img_he_path_, transform_list, results_dir_):
+
+    transform_ = "wsireg_" + "_".join(transform_list)
+    wsireg_results = results_dir_ / transform_
+    os.makedirs(wsireg_results, exist_ok=True)
+
+    reg_graph = WsiReg2D("registration", wsireg_results)
+
+    reg_graph.add_modality(
+        "DAPI",
+        str(img_dapi_path_),
+        0.2125,
+        channel_names=["DAPI"],
+        preprocessing={
+            "image_type": "FL",
+            "as_uint8": True,
+            "ch_indices": None,
+            "contrast_enhance": False,
+        }
+    )
+
+    reg_graph.add_modality(
+        "HE",
+        str(img_he_path_),
+        0.2125,
+        preprocessing={
+            "image_type": "BF",
+            "as_uint8": True,
+        },
+        channel_names=["R", "G", "B", ],
+        channel_colors=["red", "green", "blue"],
+    ) # BF invert intensity
+
+    reg_graph.add_reg_path(
+        "DAPI",
+        "HE",
+        thru_modality=None,
+        reg_params=transform_list
+    )
+
+    reg_graph.register_images()
+
+    reg_graph.save_transformations()
+
+    reg_graph.transform_images(file_writer="ome.tiff")
+
+    # Aligned files
+    output_file = wsireg_results / "registration-DAPI_to_HE_registered.ome.tiff"
+    img_he_registered = tifffile.imread(str(output_file))
+    img_he_registered_aligned = template_match(img_dapi, img_he_registered, matching="cv2.TM_CCOEFF", padding=0,
+                                               convert_gray=True)
+    img_registered_name = "HE_registered.tif"
+    tifffile.imwrite(wsireg_results / img_registered_name, img_he_registered_aligned)
+
+
+def test_wsireg_alignments(img_he_registered_, img_dapi_, results_dir_, he_registration_type):
+
+    # Create directories
+    wsireg_alignment_path = results_dir_ / "wsireg_alignments"
+    os.makedirs(wsireg_alignment_path, exist_ok=True)
+
+    # Store Masks for each registration
+    mask_dir = wsireg_alignment_path / "masks"
+    os.makedirs(mask_dir, exist_ok=True)
+    mask_path = mask_dir / f"masks_{he_registration_type}"
+
+    # Create masks for He registered
+    if not os.path.isfile(mask_path):
+        model_type_he = "2D_versatile_he"
+        labels_he, masks_he = segment_stardist(img_he_registered_, model_type_he, prob_thrsh=None, nms_thrsh=None,
+                                               n_tiles=(5, 5, 1))
+        with open(mask_path, 'wb') as file:
+            pickle.dump(masks_he, file)
+
+    else:
+        with open(mask_path, 'rb') as file:
+            masks_he = pickle.load(file)
+
+    masks_he = build_stardist_mask_outlines(masks_he["coord"])
+
+    # Load DAPI Masks
+    dapi_mask_path = results_dir_ / "masks" / "results_stardist_dapi_0_nms-None_thrsh-None.pkl"
+    with open(dapi_mask_path, "rb") as file:
+        masks_dapi = pickle.load(file)
+
+    masks_dapi = build_stardist_mask_outlines(masks_dapi["coord"])
+
+    locations = [[img_he_registered_.shape[0] // 2, img_he_registered_.shape[1] // 2], [9550, 7320], [10470, 17540],
+                 [1000, 1000], [img_he_registered_.shape[0]-500, img_he_registered[1].shape[1]-500]]
+
+    fig, axs = plt.subplots(nrows=3, ncols=len(locations), figsize=(20, 10))
+    [ax.axis("off") for ax in axs.ravel()]
+
+    for i, loc_ in enumerate(locations):
+        range_ = 200
+        x_range = [loc_[0]-range_, loc_[0]+range_]
+        y_range = [loc_[1]-range_, loc_[1]+range_]
+        axs[0, i].imshow(img_he_registered_[x_range[0]: x_range[1], y_range[0]: y_range[1]])
+        axs[1, i].imshow(img_dapi_[x_range[0]: x_range[1], y_range[0]: y_range[1]])
+
+        for mask in masks_he:
+            if check_ranges(mask, x_range, y_range):
+                x = mask[0, :] - x_range[0]
+                y = mask[1, :] - y_range[0]
+                axs[0, i].plot(y, x, 'r', linewidth=.8)
+                axs[1, i].plot(y, x, 'r', linewidth=.8)
+
+        axs[2, i].imshow(img_dapi_[x_range[0]: x_range[1], y_range[0]: y_range[1]])
+        for mask in masks_dapi:
+            if check_ranges(mask, x_range, y_range):
+                x = mask[0, :] - x_range[0]
+                y = mask[1, :] - y_range[0]
+                axs[2, i].plot(y, x, 'r', linewidth=.8)
+    plt.savefig(wsireg_alignment_path / f"alignment_{wsireg_type}.png")
+
+
+def check_ranges(mask, x_range, y_range):
+    return ((x_range[0] < mask[0, :].max() < x_range[1] and x_range[0] < mask[0, :].min() < x_range[1]) and
+            (y_range[0] < mask[1, :].max() < y_range[1] and y_range[0] < mask[1, :].min() < y_range[1]))
+
 
 # -------------------------------------- #
 # MAIN METHODS
+
 
 def preprocess_he_image(img, x_: int, y_: int, w_: int, h_: int, save_img: Optional[Path] = None):
     """
@@ -320,6 +549,7 @@ def alignment_feature_based(img_he_, img_dapi_):
 
     """
     pass
+
 
 def alignment_intensity_based(img_he_, img_dapi_):
     pass
@@ -354,25 +584,61 @@ if __name__ == "__main__":
 
     img_he_path = get_human_breast_he_path() / "additional" / "Xenium_FFPE_Human_Breast_Cancer_Rep1_he_image.ome.tif"
     img_he, metadata = load_xenium_he_ome_tiff(img_he_path, level_=he_level)
+    img_dapi_path = get_human_breast_he_path() / "morphology_mip.ome.tif"
     img_dapi = load_image(get_human_breast_he_path(), level_=dapi_level, img_type=img_type)
 
-    x, y, h, w = 3680, 3795, 18977, 25150
+    tifffile.imwrite(results_dir / "Xenium_DAPI_Level_0.tif", img_dapi)
 
+    #x, y, h, w = 3680, 3795, 18977, 25150
+    x, y, h, w = 5680, 3795, 16977, 25150
+
+    # Flip and Remove Xenium Panels from image
     img_he = preprocess_he_image(img_he, x, y, w, h, results_dir)
 
     if run_alignment:
         pass
         # Step 1: Ensure that both images have the same resolution
 
-        # Step 2: Apply noise removal
+        # Step 2: Apply template matching and add padding such that both images are not too far
 
-        # Step 3: Invert DAPI image to have similar
+        # Step 3: Apply noise removal
+
+        # Step 4: Invert DAPI image to have similar
+
+        # Step 5: Perform the alignment
 
     # ---------------------------------------- #
 
     if run_tests:
-        # Test UP-SAMPLING versus DOWN-SAMPLING at different location
-        # Methods:  compare same location but different methods of up-sampling or down-sampling
+
+        # Test Up-sampling vs Down-sampling
         # test_resize(img_he, results_dir_=results_dir)
+
+        # Test Different Noise Reduction + before vs after up-sampling
         # test_noise_reduction(img_he, img_dapi_=None, results_dir=results_dir)
-        test_stardist_features_alignment(img_he_=img_he, img_dapi_=img_dapi, results_dir_=results_dir)
+        # test_anisotropic_filter(img_he, results_dir)
+
+        # Run Stardist on original image
+        # test_stardist_features_alignment(img_he_=img_he, img_dapi_=img_dapi, results_dir_=results_dir)
+
+       # This test requires the image to be up-scaled - matched+padding with the original tissue
+
+        transforms = [["rigid"], ["rigid", "affine"], ["rigid", "affine", "nl"], ["affine", "nl"]]
+
+        if not os.path.isfile(results_dir / "Xenium_FFPE_Human_Breast_Cancer_Preprocessed_Prealigned.tif"):
+            img_he_upscaled = resize(img_he, 0.3637/0.2125, interpolation="cv2.INTER_CUBIC")
+            img_he_pre_aligned = template_match(img_dapi, img_he_upscaled, matching="cv2.TM_CCOEFF", padding=100)
+            tifffile.imwrite(results_dir / "Xenium_FFPE_Human_Breast_Cancer_Preprocessed_Prealigned.tif", img_he_pre_aligned)
+
+        #for transform in transforms:
+        #    test_wsireg(results_dir / "Xenium_FFPE_Human_Breast_Cancer_Preprocessed_Prealigned.tif",
+        #                results_dir / "Xenium_DAPI_Level_0.tif", transform_list=transform, results_dir_=results_dir)
+
+        # Test Alignment output
+        for transform in transforms:
+            wsireg_type = "-".join(transform)
+            wsireg_dir = "wsireg_" + "_".join(transform)
+            wsireg_registered_image = results_dir / wsireg_dir / "HE_registered.tif"
+            img_he_registered = tifffile.imread(str(wsireg_registered_image))
+            img_he_prealigned = tifffile.imread(str(results_dir / "Xenium_FFPE_Human_Breast_Cancer_Preprocessed_Prealigned.tif"))
+            test_wsireg_alignments(img_he_registered, img_dapi, results_dir, wsireg_type)
