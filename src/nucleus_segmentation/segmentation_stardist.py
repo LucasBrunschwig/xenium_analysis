@@ -1,4 +1,3 @@
-# TODO: In optimization compute nms once and apply threshold for prob manually
 
 # Std
 import os
@@ -14,12 +13,9 @@ import platform
 from stardist.models import StarDist2D, StarDist3D
 from csbdeep.utils import normalize
 
-
-if platform.system() != "Windows":
+if platform.system() == "Linux":
     import resource
     import sys
-
-    WORKING_DIR = Path("..")
 
     # Set the maximum memory usage in bytes (300GB) = limits of memory resources from RCP cluster
     max_memory = int(3e12)
@@ -31,10 +27,8 @@ if platform.system() != "Windows":
     from .. import utils as src_utils
     from . import utils as segmentation_utils
 else:
-    import utils as segmentation_utils
+    import src.nucleus_segmentation.utils as segmentation_utils
     import src.utils as src_utils
-
-    WORKING_DIR = Path("../../..")
 
 RESULTS = Path()
 RESULTS_3D = Path()
@@ -49,6 +43,7 @@ def init_logger():
 def segment_stardist(
         img: np.ndarray,
         model_type_: str,
+        n_tiles: tuple,
         do_3d: bool = False,
         prob_thrsh: float = None,
         nms_thrsh: float = None,
@@ -60,6 +55,7 @@ def segment_stardist(
     ----------
     img: Can be list of 2D/3D images, or array of 2D/3D images, or 4D image array
     model_type_: pretrained models 2D_versatile_fluo / 2D_paper_dsb2018, 2D_versatile_he
+    n_tiles: tuple representing the number of tiles
     do_3d: perform 3D nuclear segmentation requires 3D array
     nms_thrsh: parameter non-maxima suppression threshold
     prob_thrsh: parameter probability threshold
@@ -71,14 +67,16 @@ def segment_stardist(
     """
     if kwargs:
         raise ValueError("Kwargs should be empty, unexpected parameters:", kwargs)
+    if len(img.shape) == 3:
+        n_tiles = (n_tiles[0], n_tiles[1], 1)
 
     if not do_3d:
         model = StarDist2D.from_pretrained(model_type_)
         # normalizer (perform normalization), sparse (aggregation),
         # prob_thresh, nms_thresh (non-maximum suppression), scale (factor), n_tiles (broken up in overlay)
-        img_normalized = normalize(img, 1, 99.8, axis=(0, 1))
+        img_normalized = normalize(img, 1, 99, axis=(0, 1))
         labels, details = model.predict_instances(img_normalized, prob_thresh=prob_thrsh, nms_thresh=nms_thrsh,
-                                                  n_tiles=(2, 2))
+                                                  n_tiles=n_tiles)
         coord = details["coord"]
     else:
         model = StarDist3D.from_pretrained(model_type_)
@@ -98,11 +96,10 @@ def build_stardist_mask_outlines(masks):
     return masks_outlines
 
 
-def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: str, square_size: Optional[int],
-                         level_: int, compute_masks: bool = True):
+def optimize_stardist_2d(img: np.ndarray, img_type: str, model_type_: str, square_size: Optional[int],
+                         compute_masks: bool = True, save_path: Path = Path()):
 
-    img = src_utils.load_image(path_replicate_, img_type=image_type_, level_=level_)
-    patch, boundaries = src_utils.image_patch(img, square_size_=square_size)
+    patch, boundaries = src_utils.image_patch(img, square_size_=square_size, type_=img_type)
 
     # default 2D prob = 0.479, nms threshold = 0.3
     prob_thresh = [0.3, 0.4, 0.5, 0.7]
@@ -114,68 +111,131 @@ def optimize_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: s
         for i, nms in enumerate(nms_thresh):
 
             masks_stardist, details = segment_stardist(patch, model_type_=model_type_, do_3d=False,
-                                                       prob_thrsh=min(prob_thresh), nms_thrsh=nms)
 
+                                                       prob_thrsh=min(prob_thresh), nms_thrsh=nms, n_tiles=(5, 5))
             for j, prob in enumerate(prob_thresh):
 
                 if prob != min(prob_thresh):
                     masks_stardist = masks_stardist[0:len(np.where(details["prob"] > prob)[0])]
 
-                    os.makedirs(masks_dir, exist_ok=True)
+                os.makedirs(masks_dir, exist_ok=True)
 
-                    with open(masks_dir / f"masks_{model_type_}-nms{nms}-prob{prob}"
-                                          f"_{image_type_}-{square_size}.pkl", 'wb') as file:
-                        pickle.dump(masks_stardist, file)
+                with open(masks_dir / f"masks_{model_type_}-nms{nms}-prob{prob}"
+                                      f"_{image_type}-{square_size}.pkl", 'wb') as file:
+                    pickle.dump(masks_stardist, file)
 
-    square_origin = [(15000, 15000), (30000, 30000), (10000, 10000), (22400, 3830),
-                     (21080, 20900), (2000, 19000), (5000, 5000), (3850, 22600), (5000, 15000)]
+    masks_path = []
+    subplot_labels = []
+    for nms in nms_thresh:
+        for prob in prob_thresh:
+            path_ = masks_dir / f"masks_{model_type_}-nms{nms}-prob{prob}_{image_type}-{square_size}.pkl"
+            masks_path.append(path_)
+            subplot_labels.append(f"nms - {nms}, prob {prob}")
 
-    for x_og, y_og in square_origin:
-        fig, axs = plt.subplots(nrows=4, ncols=4, figsize=(40, 40))
-        [ax.axis("off") for ax in axs.ravel()]
+    locations = [(15000, 15000), (20000, 30000), (10000, 10000), (22400, 3830), (21080, 20900), (2000, 19000),
+                 (5000, 5000), (3850, 22600), (5000, 15000)]
 
-        x_range = None
-        y_range = None
-        if square_size is not None:
-            [ax.imshow(patch) for ax in axs.ravel()]
-        else:  # small region to plot
-            x_range = (x_og - 400, x_og + 400)
-            y_range = (y_og - 400, y_og + 400)
-            [ax.imshow(patch[y_range[0]:y_range[1], x_range[0]:x_range[1]]) for ax in axs.ravel()]
+    img_save_path = save_path / img_type
+    os.makedirs(img_save_path, exist_ok=True)
 
-        for i, nms in enumerate(nms_thresh):
-            for j, prob in enumerate(prob_thresh):
-
-                try:
-
-                    with open(masks_dir / f"masks_{model_type_}-nms{nms}-prob{prob}"
-                                          f"_{image_type_}-{square_size}.pkl", 'rb') as file:
-                        masks_stardist = pickle.load(file)
-
-                    print(len(masks_stardist))
-                    ax = axs[i, j]
-
-                    ax.set_title(f"Prob: {prob}, Nms: {nms}")
-                    for mask in masks_stardist:
-                        if square_size is not None:
-                            ax.plot(mask[0, :], mask[1, :], 'r', linewidth=.8)
-                        elif (((x_range[0] < mask[0, :].max() < x_range[1]) or
-                               (x_range[0] < mask[0, :].min() < x_range[1])) and
-                              ((y_range[0] < mask[1, :].max() < y_range[1]) or
-                               (y_range[0] < mask[1, :].min() < y_range[1]))):
-                            x = mask[0, :] - x_range[0]
-                            y = mask[1, :] - y_range[0]
-                            ax.plot(x, y, 'r', linewidth=.8)
-
-                except Exception as e:
-                    print(f"Missing Masks File: {f'masks_{model_type_}-nms{nms}-prob{prob}_{image_type_}-{square_size}.pkl'}")
-                    print(f"Try calling, optimize function with: compute_masks = True and square_size = {square_size}")
+    for location in locations:
+        visualize_model_params(img, masks_path, location, square_size=400, n_cols=4, n_rows=4, save_path=img_save_path,
+                               subplot_labels=subplot_labels)
 
 
-        plt.tight_layout()
-        plt.savefig(RESULTS / f"stardist_2d_optimization_{image_type_}_{model_type_}_{square_size}_"
-                              f"({x_range[0]}-{y_range[0]}).png")
-        plt.close()
+def visualize_model_params(img, masks_path: list, location: tuple, square_size: int, n_cols: int, n_rows: int,
+                           save_path: Path, subplot_labels: Optional[list] = None):
+    """ This function takes as input an image and a list of file (.pkl) containing masks for a given locations
+
+    :param img:
+    :param masks_path:
+    :param location:
+    :param square_size:
+    :param n_cols:
+    :param n_rows:
+    :param subplot_labels:
+    :param save_path:
+    :return: None
+    """
+
+    if n_rows * n_cols < len(masks_path):
+        raise ValueError("Grid Smaller than number of location")
+
+    fig, axs = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(5*n_cols, 5*n_rows))
+    [ax.axis("off") for ax in axs.ravel()]
+    [ax.imshow(img[location[0]-square_size:location[0]+square_size,
+                   location[1]-square_size:location[1]+square_size]) for ax in axs.ravel()]
+
+    for i, (path_, ax) in enumerate(zip(masks_path, axs.ravel())):
+        if subplot_labels is not None:
+            ax.set_title(subplot_labels[i])
+
+        x_og, y_og = location
+        x_range = (x_og - square_size, x_og + square_size)
+        y_range = (y_og - square_size, y_og + square_size)
+
+        with open(path_, "rb") as file:
+            masks = pickle.load(file)
+
+        for mask in masks:
+            if check_range(x_range, y_range, mask):
+                x = mask[0, :] - x_range[0]
+                y = mask[1, :] - y_range[0]
+                ax.plot(y, x, 'r', linewidth=.8)
+
+    plt.tight_layout()
+    plt.savefig(save_path / f"stardist_2d_optimization_{image_type}_{square_size}_{location}.png")
+    plt.close()
+
+
+def visualize_patches(img: np.ndarray, locations: list, square_size: int, masks: list, n_cols: int, n_rows: int,
+                    save_path: Path):
+    """ This function takes as input an image and corresponding masks to visualize the results at a set of given
+        locations.
+
+
+    :param img:
+    :param locations:
+    :param square_size:
+    :param masks:
+    :param n_cols:
+    :param n_rows:
+    :param save_path:
+    :return:
+    """
+
+    if n_rows * n_cols < len(locations):
+        raise ValueError("Grid Smaller than number of location")
+
+    fig, axs = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(5*n_cols, 5*n_rows))
+    [ax.axis("off") for ax in axs.ravel()]
+
+    for location, ax in zip(locations, axs.ravel()):
+        for x_og, y_og in location:
+            x_range = (x_og - square_size, x_og + square_size)
+            y_range = (y_og - square_size, y_og + square_size)
+            ax.imshow(img[y_range[0]:y_range[1], x_range[0]:x_range[1]])
+
+            for mask in masks:
+                if check_range(x_range, y_range, mask):
+                    x = mask[0, :] - x_range[0]
+                    y = mask[1, :] - y_range[0]
+                    ax.plot(y, x, 'r', linewidth=.8)
+
+    plt.savefig(save_path / f"stardist_2d_optimization_{image_type}_{square_size}).png")
+    plt.close()
+
+
+def check_range(x_range: tuple, y_range: tuple, mask: np.ndarray):
+    """ Check if the masks is in the predefined range
+
+    :param x_range: range of x coordinate
+    :param y_range: range of y coordinate
+    :param mask: mask given as a 2 x 'm'
+    :return: True or False based on
+    """
+    return (((x_range[0] < mask[0, :].max() < x_range[1]) or (x_range[0] < mask[0, :].min() < x_range[1])) and
+            ((y_range[0] < mask[1, :].max() < y_range[1]) or (y_range[0] < mask[1, :].min() < y_range[1])))
 
 
 def run_patch_stardist_2d(path_replicate_: Path, model_type_: str, image_type_: str,
@@ -252,42 +312,57 @@ def run_stardist_3d(path_replicate_: Path, model_type_: str, level_: int = 0, di
 def build_results_dir():
     global RESULTS
 
-    RESULTS = WORKING_DIR / "scratch/lbrunsch/results/nucleus_segmentation/stardist"
+    RESULTS = src_utils.get_results_path() / "segmentation" / "stardist"
     os.makedirs(RESULTS, exist_ok=True)
     global RESULTS_3D
     RESULTS_3D = RESULTS / "3d_seg"
     os.makedirs(RESULTS_3D, exist_ok=True)
 
+    return RESULTS, RESULTS_3D
+
 
 if __name__ == "__main__":
 
-    # Various set up
-    src_utils.check_cuda()
-    build_results_dir()
-    init_logger()
-
-    # Run Parameters
+    # --------------------------------------- #
+    # Script Parameters
     run = "2D"  # alternative: 3D or Patch
     square_size_ = None
     optimize = True
+    image_path = "he_aligned"  # alt: dapi, he or he_aligned
+    compute_masks = False
+    # -------------------------------------- #
 
-    # Path
-    data_path = WORKING_DIR / "scratch/lbrunsch/data"
-    path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
+    # Various set up
+    src_utils.check_gpu()
+    results, results_3d = build_results_dir()
+    init_logger()
 
+    # Extract image path
+    if image_path == "dapi":
+        path_replicate = src_utils.get_mouse_xenium_path()
+        model_type = "2D_versatile_fluo"
+        image_dapi_type = "mip"  # alternative: focus, mip
+        image = src_utils.load_image(path_replicate, img_type=image_dapi_type)
+        image_type = "DAPI"
+
+    elif image_path == "he_aligned":
+        path_replicate = src_utils.get_human_breast_he_aligned_path()
+        model_type = "2D_versatile_he"
+        image = src_utils.load_xenium_he_ome_tiff(path_replicate, level_=0)
+        image_type = "HE"
+
+    else:
+        raise ValueError("Not Implemented")
+
+    # Run Stardist 2D optimization
     if run == "2D":
-        StarDist2D.from_pretrained()
-
-        # Model Version
-        model_type = "2D_versatile_fluo"  # alternative: 2D_versatile_fluo, 2D_paper_dsb2018, 2D_versatile_he, 2D_demo
 
         # Image Type
-        image_type = "mip"  # alternative: focus, mip
         level = 0
 
         if optimize:
-            optimize_stardist_2d(path_replicate_1, model_type, image_type, square_size=square_size_, level_=level,
-                                 compute_masks=False)
+            optimize_stardist_2d(image, image_type, model_type, square_size=square_size_, compute_masks=compute_masks,
+                                 save_path=results)
 
         else:
             # Model Parameters
@@ -295,11 +370,11 @@ if __name__ == "__main__":
             nms_threshold = None
 
             # Run Stardist at one location and compare to Xenium
-            run_stardist_2d(path_replicate_1, model_type, image_type,
-                            prob_thrsh=prob_threshold, nms_thrsh=nms_threshold, square_size=square_size_)
+            run_stardist_2d(path_replicate, model_type, image_type,
+                            prob_thrsh=prob_threshold, nms_thrsh=nms_threshold, square_size=square_size_, )
 
             # Run Stardist at various locations
-            run_stardist_location_2d(path_replicate_1, model_type, image_type,
+            run_stardist_location_2d(path_replicate, model_type, image_type,
                                      prob_thrsh=prob_threshold, nms_thrsh=nms_threshold, square_size=square_size_)
 
     # Run stardist with various patch size
@@ -314,11 +389,11 @@ if __name__ == "__main__":
         prob_threshold = None
         nms_threshold = None
 
-        run_patch_stardist_2d(path_replicate_1, model_type, image_type, nms_threshold, prob_threshold)
+        run_patch_stardist_2d(path_replicate, model_type, image_type, nms_threshold, prob_threshold)
 
-    # Run Stardist in 3D (needs some work)
+    # Run stardist in 3D (needs some work)
     elif run == "3D":
         level = 0
         StarDist3D.from_pretrained()
         model_type = "3D_demo"
-        run_stardist_3d(path_replicate_1, level_=level, model_type_=model_type)
+        run_stardist_3d(path_replicate, level_=level, model_type_=model_type)

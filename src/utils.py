@@ -365,26 +365,41 @@ def get_human_breast_he_path():
     return get_data_path() / config["human_breast_replicate_1"]
 
 
-def load_xenium_he_ome_tiff(path: Path, level_: int, debug: bool = False):
+def get_human_breast_he_aligned_path():
+    config = load_config()
+    return get_results_path() / config["human_breast_h&e_aligned"]
 
-    if debug:
-        print(f"Loading: {path.name}, level={level_}")
+
+def get_human_breast_he_resolution():
+    return float(load_config()["human_breast_h&e_resolution"])
+
+
+def get_human_breast_dapi_resolution():
+    return float(load_config()["human_breast_dapi_resolution"])
+
+
+def load_xenium_he_ome_tiff(path: Path, level_: int):
+
     with tifffile.TiffFile(path) as tif:
-        if debug:
-            print(f"\tNumber of series: {len(tif.series)}")
         image = tif.series[0].levels[level_].asarray()
-        metadata = xmltodict.parse(tif.ome_metadata, attr_prefix='')['OME']
-
-    # This holds because there is only one series ! With multiple series
-    dimension_order = metadata["Image"]["Pixels"]["DimensionOrder"]
-    physical_size_x = float(metadata["Image"]["Pixels"]["PhysicalSizeX"])
-    physical_size_y = float(metadata["Image"]["Pixels"]["PhysicalSizeY"])
-    pyramidal = {}
-    for key, dimensions in enumerate(metadata["StructuredAnnotations"]["MapAnnotation"]["Value"]["M"]):
-        pyramidal[key] = [int(el) for el in dimensions["#text"].split(" ")]
-    custom_metadata = {"dimension": dimension_order, "x_size": physical_size_x, "y_size": physical_size_y,
-                       "levels": pyramidal}
 
     print("Image shape:", image.shape)
+
+    try:
+        with tifffile.TiffFile(path) as tif:
+            metadata = xmltodict.parse(tif.ome_metadata, attr_prefix='')['OME']
+
+        # This holds because there is only one series ! With multiple series
+        dimension_order = metadata["Image"]["Pixels"]["DimensionOrder"]
+        physical_size_x = float(metadata["Image"]["Pixels"]["PhysicalSizeX"])
+        physical_size_y = float(metadata["Image"]["Pixels"]["PhysicalSizeY"])
+        pyramidal = {}
+        for key, dimensions in enumerate(metadata["StructuredAnnotations"]["MapAnnotation"]["Value"]["M"]):
+            pyramidal[key] = [int(el) for el in dimensions["#text"].split(" ")]
+        custom_metadata = {"dimension": dimension_order, "x_size": physical_size_x, "y_size": physical_size_y,
+                           "levels": pyramidal}
+    except Exception as e:
+        print("No metadata found")
+        return image
 
     return image, custom_metadata
