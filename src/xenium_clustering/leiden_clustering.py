@@ -20,8 +20,8 @@ import numpy as np
 import seaborn as sns
 
 # Relative
-from utils import load_rna_seq_data, load_xenium_data, preprocess_transcriptomics, get_name_from_path
-from visualization import visualize
+from src.utils import load_rna_seq_data, load_xenium_data, preprocess_transcriptomics, get_name_from_path
+from src.visualization import visualize
 
 N_NEIGHBORS = 50
 N_COMPONENTS = 50

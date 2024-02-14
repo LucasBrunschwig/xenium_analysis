@@ -63,7 +63,9 @@ DEFAULT_HYPERPARAMS_SEGMENTATION = {
     "iters": 500
 }
 
+
 # additional: estimate_scale_from_centers / n_clusters / nuclei_genes / cyto_genes / new_component_weights new_component_fraction
+
 
 DEFAULT_HYPERPARAMS_PLOTTING = {
     # TODO: add parameters

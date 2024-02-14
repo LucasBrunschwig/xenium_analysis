@@ -1,3 +1,12 @@
+"""
+In this image
+
+Implementations:
+[  ]:
+
+
+"""
+
 
 # Std
 import os
@@ -9,29 +18,11 @@ from typing import Optional
 import matplotlib.pyplot as plt
 import numpy as np
 import logging
-import platform
 from stardist.models import StarDist2D, StarDist3D
 from csbdeep.utils import normalize
 
-if platform.system() == "Linux":
-    import resource
-    import sys
-
-    # Set the maximum memory usage in bytes (300GB) = limits of memory resources from RCP cluster
-    max_memory = int(3e12)
-    resource.setrlimit(resource.RLIMIT_AS, (max_memory, max_memory))
-
-    sys.path.append("..")
-    sys.path.append("../..")
-
-    from .. import utils as src_utils
-    from . import utils as segmentation_utils
-else:
-    import src.nucleus_segmentation.utils as segmentation_utils
-    import src.utils as src_utils
-
-RESULTS = Path()
-RESULTS_3D = Path()
+import src.nucleus_segmentation.utils as segmentation_utils
+import src.utils as src_utils
 
 
 def init_logger():
@@ -47,7 +38,9 @@ def segment_stardist(
         do_3d: bool = False,
         prob_thrsh: float = None,
         nms_thrsh: float = None,
-        **kwargs
+        scale: float = 0.2125/0.5,
+        pmin: float = 1.,
+        pmax: float = 99.,
 ):
     """Run cellpose and get masks
 
@@ -59,14 +52,15 @@ def segment_stardist(
     do_3d: perform 3D nuclear segmentation requires 3D array
     nms_thrsh: parameter non-maxima suppression threshold
     prob_thrsh: parameter probability threshold
+    scale: the scaling to match the resolution (stardist was trained with resolution 0.5 um / pixels
+    pmin: normalization parameters
 
     Returns
     -------
     np.ndarray
         labelled image, where 0 = no masks; 1, 2, ... = mask labels
     """
-    if kwargs:
-        raise ValueError("Kwargs should be empty, unexpected parameters:", kwargs)
+
     if len(img.shape) == 3:
         n_tiles = (n_tiles[0], n_tiles[1], 1)
 
@@ -74,9 +68,9 @@ def segment_stardist(
         model = StarDist2D.from_pretrained(model_type_)
         # normalizer (perform normalization), sparse (aggregation),
         # prob_thresh, nms_thresh (non-maximum suppression), scale (factor), n_tiles (broken up in overlay)
-        img_normalized = normalize(img, 1, 99, axis=(0, 1))
+        img_normalized = normalize(img, pmin, pmax, axis=(0, 1))
         labels, details = model.predict_instances(img_normalized, prob_thresh=prob_thrsh, nms_thresh=nms_thrsh,
-                                                  n_tiles=n_tiles)
+                                                  n_tiles=n_tiles, scale=scale)
         coord = details["coord"]
     else:
         model = StarDist3D.from_pretrained(model_type_)
@@ -97,22 +91,20 @@ def build_stardist_mask_outlines(masks):
 
 
 def optimize_stardist_2d(img: np.ndarray, img_type: str, model_type_: str, square_size: Optional[int],
-                         compute_masks: bool = True, save_path: Path = Path()):
+                         compute_masks: bool = True, save_path: Path = Path(), pmin: float = 1., pmax:float = 99., scale: float = 0.2125/0.4):
 
     patch, boundaries = src_utils.image_patch(img, square_size_=square_size, type_=img_type)
 
     # default 2D prob = 0.479, nms threshold = 0.3
     prob_thresh = [0.3, 0.4, 0.5, 0.7]
     nms_thresh = [0.1, 0.3, 0.5, 0.7]
-
-    masks_dir = RESULTS / "masks"
+    masks_dir = save_path / "masks"
 
     if compute_masks:
         for i, nms in enumerate(nms_thresh):
 
             masks_stardist, details = segment_stardist(patch, model_type_=model_type_, do_3d=False,
-
-                                                       prob_thrsh=min(prob_thresh), nms_thrsh=nms, n_tiles=(5, 5))
+                                                       prob_thrsh=min(prob_thresh), nms_thrsh=nms, n_tiles=(5, 5), pmin=pmin, pmax=pmax, scale=scale)
             for j, prob in enumerate(prob_thresh):
 
                 if prob != min(prob_thresh):
@@ -120,31 +112,39 @@ def optimize_stardist_2d(img: np.ndarray, img_type: str, model_type_: str, squar
 
                 os.makedirs(masks_dir, exist_ok=True)
 
-                with open(masks_dir / f"masks_{model_type_}-nms{nms}-prob{prob}"
-                                      f"_{image_type}-{square_size}.pkl", 'wb') as file:
+                with open(masks_dir / f"masks_{model_type_}-nms{nms}-prob{prob}_p{pmin}-p{pmax}"
+                                      f"_scale{scale}_{image_type}-{square_size}.pkl", 'wb') as file:
                     pickle.dump(masks_stardist, file)
 
     masks_path = []
     subplot_labels = []
     for nms in nms_thresh:
         for prob in prob_thresh:
-            path_ = masks_dir / f"masks_{model_type_}-nms{nms}-prob{prob}_{image_type}-{square_size}.pkl"
+            path_ = masks_dir / f"masks_{model_type_}-nms{nms}-prob{prob}_p{pmin}-p{pmax}_scale{scale}_{image_type}-{square_size}.pkl"
             masks_path.append(path_)
             subplot_labels.append(f"nms - {nms}, prob {prob}")
 
-    locations = [(15000, 15000), (20000, 30000), (10000, 10000), (22400, 3830), (21080, 20900), (2000, 19000),
-                 (5000, 5000), (3850, 22600), (5000, 15000)]
+    if square_size is None:
 
-    img_save_path = save_path / img_type
-    os.makedirs(img_save_path, exist_ok=True)
+        locations = [(15000, 15000), (20000, 30000), (10000, 10000), (22400, 3830), (21080, 20900), (2000, 19000),
+                     (5000, 5000), (3850, 22600), (5000, 15000)]
 
-    for location in locations:
-        visualize_model_params(img, masks_path, location, square_size=400, n_cols=4, n_rows=4, save_path=img_save_path,
-                               subplot_labels=subplot_labels)
+        img_save_path = save_path / img_type / f"pmin{pmin}-pmax{pmax}"
+        os.makedirs(img_save_path, exist_ok=True)
+
+        for location in locations:
+            visualize_model_params(img, masks_path, location, square_size=400, n_cols=4, n_rows=4, save_path=img_save_path,
+                                   subplot_labels=subplot_labels, sub_image=True)
+
+    else:
+        img_save_path = save_path / img_type / f"pmin{pmin}-pmax{pmax}"
+        os.makedirs(img_save_path, exist_ok=True)
+        visualize_model_params(img, masks_path, [img.shape[0] // 2, img.shape[1] // 2], square_size, n_cols=4,
+                               n_rows=4, save_path=img_save_path, subplot_labels=subplot_labels, sub_image=False)
 
 
 def visualize_model_params(img, masks_path: list, location: tuple, square_size: int, n_cols: int, n_rows: int,
-                           save_path: Path, subplot_labels: Optional[list] = None):
+                           sub_image: bool, save_path: Path, subplot_labels: Optional[list] = None,):
     """ This function takes as input an image and a list of file (.pkl) containing masks for a given locations
 
     :param img:
@@ -178,13 +178,17 @@ def visualize_model_params(img, masks_path: list, location: tuple, square_size: 
             masks = pickle.load(file)
 
         for mask in masks:
-            if check_range(x_range, y_range, mask):
+            if sub_image and check_range(x_range, y_range, mask):
                 x = mask[0, :] - x_range[0]
                 y = mask[1, :] - y_range[0]
                 ax.plot(y, x, 'r', linewidth=.8)
+            elif not sub_image:
+                x = mask[0, :]
+                y = mask[1, :]
+                ax.plot(y, x, 'r', linewidth=.8)
 
     plt.tight_layout()
-    plt.savefig(save_path / f"stardist_2d_optimization_{image_type}_{square_size}_{location}.png")
+    plt.savefig(save_path / f"stardist_2d_optimization_{image_type}_{square_size}_{location}.png", dpi=300)
     plt.close()
 
 
@@ -310,18 +314,22 @@ def run_stardist_3d(path_replicate_: Path, model_type_: str, level_: int = 0, di
 
 
 def build_results_dir():
-    global RESULTS
 
-    RESULTS = src_utils.get_results_path() / "segmentation" / "stardist"
-    os.makedirs(RESULTS, exist_ok=True)
-    global RESULTS_3D
-    RESULTS_3D = RESULTS / "3d_seg"
-    os.makedirs(RESULTS_3D, exist_ok=True)
+    results_ = src_utils.get_results_path() / "segmentation" / "stardist"
+    os.makedirs(results_, exist_ok=True)
 
-    return RESULTS, RESULTS_3D
+    results_3d_ = results_ / "3d_seg"
+    os.makedirs(results_3d_, exist_ok=True)
+
+    return results_, results_3d_
 
 
 if __name__ == "__main__":
+
+    # TODO: Create Segmentation from The original image and perform same transformation
+    #   - multiply point by the resolution
+    #   - go through the wsireg transformation
+    #   - check for background image
 
     # --------------------------------------- #
     # Script Parameters
@@ -330,6 +338,10 @@ if __name__ == "__main__":
     optimize = True
     image_path = "he_aligned"  # alt: dapi, he or he_aligned
     compute_masks = False
+    pmin = 0.1
+    pmax = 99.9
+    scale = 0.2125/0.4
+
     # -------------------------------------- #
 
     # Various set up
@@ -362,7 +374,7 @@ if __name__ == "__main__":
 
         if optimize:
             optimize_stardist_2d(image, image_type, model_type, square_size=square_size_, compute_masks=compute_masks,
-                                 save_path=results)
+                                 save_path=results, pmin=pmin, pmax=pmax, scale=scale)
 
         else:
             # Model Parameters

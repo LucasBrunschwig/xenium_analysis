@@ -141,13 +141,6 @@ def visualize(positions_, square_size_, img_he_, img_dapi_, save_dir_):
     plt.close()
 
 
-def locations_random_generation(x, y):
-    pass
-
-def convert_xenium_boundaries_image(df):
-    pass
-
-
 if __name__ == "__main__":
 
     # Scripts Parameters

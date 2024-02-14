@@ -171,7 +171,7 @@ if __name__ == "__main__":
     # Use custom loading for DAPI
     print("Loading DAPI...")
     image_dapi = load_image(human_breast_path, img_type="mip", level_=level_dapi)
-    print("metadta: x_size: 0.2125, y_size: 0.2125")
+    print("metadata: x_size: 0.2125, y_size: 0.2125")
     print(f"Resolution {level_dapi}: {0.2125*(level_dapi+1)}")
 
     print("# ----------------------------------- #")

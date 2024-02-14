@@ -1,9 +1,11 @@
 # std
 import os
+import pickle
 from pathlib import Path
 import shutil
 import zipfile
 import re
+from typing import Optional
 
 # third party
 import anndata
@@ -16,7 +18,7 @@ import tifffile
 import torch
 import json
 import xmltodict
-
+from shapely import Polygon
 
 def load_config():
 
@@ -194,6 +196,97 @@ def load_xenium_data(path: Path):
     return adata
 
 
+def load_xenium_masks(path: Path, format: Optional[str] = None, resolution: Optional[float] = None):
+    """
+    x: horizontal  coordinate
+    y: vertical coordinate
+
+    :param path:
+    :param format:
+    :param resolution:
+    :return:
+    """
+    # Avoid Recomputing
+    save_file = None
+    if format == "pixel":
+        save_file = path / "xenium_masks_pixel_formatted.pkl"
+        if os.path.isfile(save_file):
+            with open(save_file, "rb") as file:
+                return pickle.load(file)
+
+    nucleus_boundaries = load_xenium_data(path).uns["nucleus_boundaries"]
+
+    if format == "pixel":
+        if resolution is None:
+            raise ValueError("Conversion to Pixel Requires a resolution")
+
+        masks_pixels = {"x": [], "y": [], "polygon": []}
+        for cell_ix in np.unique(nucleus_boundaries["cell_id"]):
+            masks_coord = nucleus_boundaries[nucleus_boundaries["cell_id"] == cell_ix]
+            masks_pixels["x"].append((masks_coord["vertex_x"].to_numpy() / resolution).astype(int))
+            masks_pixels["y"].append((masks_coord["vertex_y"].to_numpy() / resolution).astype(int))
+            masks_pixels["polygon"].append(Polygon(np.vstack((masks_pixels["x"][-1], masks_pixels["y"][-1])).T))
+
+        df = pd.DataFrame.from_dict(masks_pixels)
+        with open(save_file, "wb") as file:
+            pickle.dump(df, file)
+
+        return df
+
+    elif format is None:
+        return nucleus_boundaries
+    else:
+        raise ValueError("Format Unknown")
+
+
+def load_geojson_masks(path: Path):
+    """
+    first coordinate: horizontal
+    second coordinate: vertical
+
+    :param path:
+    :return:
+    """
+
+    # Avoid Recomputing
+    save_file = str(path)[:-8] + "_formatted.pkl"
+    if os.path.isfile(save_file):
+        with open(save_file, "rb") as file:
+            return pickle.load(file)
+
+    masks_pixels = {"cell_id": [], "x": [], "y": [], "polygon": []}
+
+    with open(path, "r") as file:
+        annotations = json.load(file)
+
+    features = annotations["features"]
+    i = 0
+    for feature in features:
+        if feature["geometry"]["type"] == "Polygon":
+            polygon = np.array(feature["geometry"]["coordinates"][0]).astype(int)
+            if Polygon(polygon).area * 0.2125 < 3000:
+                i += 1
+                masks_pixels["cell_id"].append(i)
+                masks_pixels["x"].append(polygon[:, 0])
+                masks_pixels["y"].append(polygon[:, 1])
+                masks_pixels["polygon"].append(Polygon(polygon))
+
+    df = pd.DataFrame.from_dict(masks_pixels)
+    with open(save_file, "wb") as file:
+        pickle.dump(df, file)
+
+    return df
+
+
+def load_xenium_transcriptomics(path: Path):
+
+    transcripts = load_xenium_data(path).uns["spots"]
+    transcripts["x_pixels"] = (transcripts["x_location"] / 0.2125).astype(int)
+    transcripts["y_pixels"] = (transcripts["y_location"] / 0.2125).astype(int)
+
+    return transcripts[["x_pixels", "y_pixels", "feature_name"]]
+
+
 def load_rna_seq_data(path):
     adata = sc.read_loom(path)
 
@@ -304,24 +397,23 @@ def image_patch(img_array_, type_: str, square_size_: int = 400, orig_: tuple = 
 
     # if no coordinates take the center
     if orig_ is None:
-        l_t = img_array_.shape[coord_1] // 2 - square_size_ // 2
-        r_t = img_array_.shape[coord_1] // 2 + square_size_ // 2
-        l_b = img_array_.shape[coord_2] // 2 - square_size_ // 2
-        r_b = img_array_.shape[coord_2] // 2 + square_size_ // 2
+        l_t = img_array_.shape[coord_1] // 2 - square_size_
+        r_t = img_array_.shape[coord_1] // 2 + square_size_
+        l_b = img_array_.shape[coord_2] // 2 - square_size_
+        r_b = img_array_.shape[coord_2] // 2 + square_size_
 
     # use specified coordinates
     else:
-        l_t = orig_[coord_1] - square_size_ // 2
-        r_t = orig_[coord_1] + square_size_ // 2
-        l_b = orig_[coord_2] - square_size_ // 2
-        r_b = orig_[coord_2] + square_size_ // 2
+        l_t = orig_[coord_1] - square_size_
+        r_t = orig_[coord_1] + square_size_
+        l_b = orig_[coord_2] - square_size_
+        r_b = orig_[coord_2] + square_size_
 
     if len(img_array_.shape) == 2 or type_ == "HE":
         return [img_array_[l_t:r_t, l_b:r_b], ([l_t, r_t], [l_b, r_b])]
     else:
         return [img_array_[:, l_t:r_t, l_b:r_b],
                 ([0, l_t, r_t], [img_array_.shape[0], l_b, r_b])]
-
 
 
 def check_gpu():
@@ -368,6 +460,11 @@ def get_human_breast_he_path():
 def get_human_breast_he_aligned_path():
     config = load_config()
     return get_results_path() / config["human_breast_h&e_aligned"]
+
+
+def get_human_breast_dapi_aligned_path():
+    config = load_config()
+    return get_results_path() / config["human_breast_dapi_aligned"]
 
 
 def get_human_breast_he_resolution():

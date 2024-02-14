@@ -2,7 +2,7 @@
 In this image we will preprocess both images and align them with one another
 
 
-Strategy:
+Strategy for image registration:
 - invert DAPI so that it matches H&E nuclei in terms of correlation and convert H&E to shades of gray
 - noise reduction with Gaussian smoothing
     - applying gaussian noise to both images before resizing can help in getting similar amount of details
@@ -22,6 +22,12 @@ Strategy:
       how they superimpose with nuclei
     - something that could be interesting would be to quantify the alignment with some grounds truth in DAPI only in TP
       to see how well they overlap.
+
+Strategy:
+- Run stardist on H&E and DAPI to observe performance
+- Register DAPI / H&E to have a measurable comparison
+- Compute ground truth on 3 tiles (n x n) and then measure the accuracy of both models
+    - the ground truth should represent DAPI and H&E signal -> create a good protocol for this
 
 Implementations:
 [ x ]: Test different methods for up-scaling and down-scaling and choose one
@@ -339,7 +345,7 @@ def preprocess_he_image(img_he_, img_dapi_, save_img: Optional[Path] = None):
     return img_dapi_
 
 
-def quality_check(img_he_: np.ndarray, img_dapi_: np.ndarray, locations: list, square_size_: int, results_dir_):
+def quality_check(img_he_: np.ndarray, img_dapi_: np.ndarray, locations_: list, square_size_: int, results_dir_):
 
     # Create directories
     wsireg_alignment_path = results_dir_ / "qc_registration"
@@ -378,10 +384,10 @@ def quality_check(img_he_: np.ndarray, img_dapi_: np.ndarray, locations: list, s
 
     masks_dapi = build_stardist_mask_outlines(masks_dapi["coord"])
 
-    fig, axs = plt.subplots(nrows=3, ncols=len(locations), figsize=(20, 10))
+    fig, axs = plt.subplots(nrows=3, ncols=len(locations_), figsize=(20, 10))
     [ax.axis("off") for ax in axs.ravel()]
 
-    for i, loc_ in enumerate(locations):
+    for i, loc_ in enumerate(locations_):
         x_range = [loc_[0]-square_size_, loc_[0]+square_size_]
         y_range = [loc_[1]-square_size_, loc_[1]+square_size_]
         axs[0, i].imshow(img_he_[x_range[0]: x_range[1], y_range[0]: y_range[1]])
@@ -402,6 +408,20 @@ def quality_check(img_he_: np.ndarray, img_dapi_: np.ndarray, locations: list, s
                 axs[2, i].plot(y, x, 'r', linewidth=.8)
     plt.savefig(wsireg_alignment_path / f"alignment.png")
 
+
+def compare_he_dapi_segmentation(img_dapi_, img_he_, ground_truth_, results_dir_):
+    """ This function will compare stardist prediction on registered/preprocessed H&E and DAPI.
+        For comparison purpose this will be measured compared to a ground truth on 3 different tiles.
+        These tiles were manually annotated by using DAPI and HE-hematoxylin-deconvolved
+
+    :param img_dapi_:
+    :param img_he_:
+    :param ground_truth_:
+    :param results_dir_:
+    :return:
+    """
+
+    # Bounding Boxes in Pixel
 
 def registration_intensity_based(img_he_path_, img_dapi_path_, transformations_list_, results_dir_):
     """ ITK registration is intensity based and performs well for multimodal registration
@@ -477,7 +497,7 @@ def registration_feature_based(img_he_, img_dapi_):
 
 
     """
-    raise  ValueError("Not Implemented")
+    raise ValueError("Not Implemented")
 
 
 def build_results_dir():
@@ -529,7 +549,7 @@ if __name__ == "__main__":
         locations = [[img_registered.shape[0] // 2, img_registered.shape[1] // 2], [9550, 7320], [10470, 17540],
                      [1000, 1000], [img_registered.shape[0] - 500, img_registered[1].shape[1] - 500]]
 
-        quality_check(img_registered, img_dapi_pre, locations=locations, square_size_=200, results_dir_=results_dir)
+        quality_check(img_registered, img_dapi_pre, locations_=locations, square_size_=200, results_dir_=results_dir)
     # ---------------------------------------- #
 
     if run_tests:
