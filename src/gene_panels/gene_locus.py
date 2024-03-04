@@ -213,12 +213,14 @@ def main(file_path: Path, organism: str, plot: bool = True):
         mapping = {f"{i}": i-1 for i in range(1, 23)}
         mapping.update({"X": 22, "Y": 23})
         rows = list(mapping.keys())
+
     elif organism == "Mus musculus":
         col = "gene"
         column = ['q']
         mapping = {f"{i}": i - 1 for i in range(1, 20)}
         mapping.update({"X": 19, "Y": 20})
         rows = list(mapping.keys())
+
     else:
         raise ValueError("Undetermined organism")
 

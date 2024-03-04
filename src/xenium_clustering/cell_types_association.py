@@ -36,7 +36,7 @@ def cell_type_association(method_: str):
 
     """
 
-    data_path = Path("../../scratch/lbrunsch/data")
+    data_path = Path("../../../scratch/lbrunsch/data")
 
     path_replicate_1 = data_path / "Xenium_V1_FF_Mouse_Brain_MultiSection_1"
     replicate = load_xenium_data(path_replicate_1)

@@ -10,5 +10,10 @@
   "nuclear_features": "nucleus_features",
   "cell_segmentation": "cell_segmentation",
   "human_breast_dapi_resolution": "0.2125",
-  "human_breast_h&e_resolution": "0.36378"
+  "human_breast_h&e_resolution": "0.36378",
+  "geojson_masks": {
+      "background_masks": "geojson_objects/Xenium_FFPE_Human_Breast_Cancer_DAPI_registered_background.geojson",
+      "stardist_python_pmin0-1_pmin99-9_scale0-5": "geojson_objects/pmin0-1_pmin99-9_scale0-5.geojson",
+      "stardist_qupath": "geojson_objects/Xenium_FFPE_Human_Breast_Cancer_DAPI_registered.geojson"
+  }
 }

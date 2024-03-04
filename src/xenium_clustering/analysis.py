@@ -12,8 +12,8 @@ from utils import load_xenium_data
 if __name__ == "__main__":
 
     # Path compatibility with any OS
-    data_path = os.path.join("..", "..", "scratch", "lbrunsch", "data", "Xenium_V1_FF_Mouse_Brain_MultiSection_1")
-    save_path = os.path.join("..", "..", "scratch", "lbrunsch", "results")
+    data_path = os.path.join("../..", "..", "scratch", "lbrunsch", "data", "Xenium_V1_FF_Mouse_Brain_MultiSection_1")
+    save_path = os.path.join("../..", "..", "scratch", "lbrunsch", "results")
 
     # Load Data
     adata = load_xenium_data(data_path)

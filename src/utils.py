@@ -220,13 +220,13 @@ def load_xenium_masks(path: Path, format: Optional[str] = None, resolution: Opti
         if resolution is None:
             raise ValueError("Conversion to Pixel Requires a resolution")
 
-        masks_pixels = {"x": [], "y": [], "polygon": []}
+        masks_pixels = {"x": [], "y": [], "polygon": [], "cell_id": []}
         for cell_ix in np.unique(nucleus_boundaries["cell_id"]):
             masks_coord = nucleus_boundaries[nucleus_boundaries["cell_id"] == cell_ix]
             masks_pixels["x"].append((masks_coord["vertex_x"].to_numpy() / resolution).astype(int))
             masks_pixels["y"].append((masks_coord["vertex_y"].to_numpy() / resolution).astype(int))
             masks_pixels["polygon"].append(Polygon(np.vstack((masks_pixels["x"][-1], masks_pixels["y"][-1])).T))
-
+            masks_pixels["cell_id"].append(cell_ix)
         df = pd.DataFrame.from_dict(masks_pixels)
         with open(save_file, "wb") as file:
             pickle.dump(df, file)
@@ -239,12 +239,13 @@ def load_xenium_masks(path: Path, format: Optional[str] = None, resolution: Opti
         raise ValueError("Format Unknown")
 
 
-def load_geojson_masks(path: Path):
+def load_geojson_masks(path: Path, background_):
     """
     first coordinate: horizontal
     second coordinate: vertical
 
     :param path:
+    :param background_:
     :return:
     """
 
@@ -264,12 +265,13 @@ def load_geojson_masks(path: Path):
     for feature in features:
         if feature["geometry"]["type"] == "Polygon":
             polygon = np.array(feature["geometry"]["coordinates"][0]).astype(int)
-            if Polygon(polygon).area * 0.2125 < 3000:
+            polygon_ = Polygon(polygon)
+            if background_.contains(polygon_) and polygon_.area * 0.2125 < 3000:
                 i += 1
                 masks_pixels["cell_id"].append(i)
                 masks_pixels["x"].append(polygon[:, 0])
                 masks_pixels["y"].append(polygon[:, 1])
-                masks_pixels["polygon"].append(Polygon(polygon))
+                masks_pixels["polygon"].append(polygon_)
 
     df = pd.DataFrame.from_dict(masks_pixels)
     with open(save_file, "wb") as file:
@@ -311,17 +313,19 @@ def preprocess_transcriptomics(adata, filter_: bool = True):
         Remark: in some cases you do not want the preprocessing to drop data points (set filter_ = False)
     """
 
+    adata_ = adata.copy()
+
     # Filter adata by number of counts per cell and number of gene abundance across cells
     if filter_:
-        sc.pp.filter_cells(adata, min_counts=10)
-        sc.pp.filter_genes(adata, min_cells=5)
+        sc.pp.filter_cells(adata_, min_counts=10)
+        sc.pp.filter_genes(adata_, min_cells=5)
 
     # Normalize
-    adata.layers["counts"] = adata.X.copy()
-    sc.pp.normalize_total(adata, inplace=True)
-    sc.pp.log1p(adata)
+    adata_.layers["counts"] = adata_.X.copy()
+    sc.pp.normalize_total(adata_, inplace=True)
+    sc.pp.log1p(adata_)
 
-    return adata
+    return adata_
 
 
 def plot_xenium_labels(adata, label_key):
@@ -473,6 +477,10 @@ def get_human_breast_he_resolution():
 
 def get_human_breast_dapi_resolution():
     return float(load_config()["human_breast_dapi_resolution"])
+
+
+def get_geojson_masks(method):
+    return get_results_path() / load_config()["geojson_masks"][method]
 
 
 def load_xenium_he_ome_tiff(path: Path, level_: int):
