@@ -169,6 +169,7 @@ if __name__ == "__main__":
     print(model)
 
     example = torch.Tensor(np.transpose(dataset[0][0], axes=(2, 0, 1))).unsqueeze(0).to(device)
+    example = torch.zeros(1, 3, 224, 224).to(device)
     model.to(device)
 
     output = model(example)
