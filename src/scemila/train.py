@@ -1,3 +1,4 @@
+import argparse
 
 import torch
 from torch import nn
@@ -12,15 +13,15 @@ from tqdm import tqdm
 
 from src.utils import check_gpu, get_results_path
 from src.scemila.custom_dataset import TrainingImageDataset, TestImageDataset
-from src.scemila.model import CNNClassifierWithAttention
+from src.scemila.model import ImageClassificationModel
 
 DEVICE = check_gpu()
 
 
-class ConvNetAttentionTraining(nn.Module):
+class ImageClassificationTraining(nn.Module):
     def __init__(self, model, batch_size, lr, n_iter, n_iter_min, early_stopping, n_iter_print, patience,
                  preprocess, transforms, clipping_value, weight_decay):
-        super(ConvNetAttentionTraining, self).__init__()
+        super(ImageClassificationTraining, self).__init__()
 
         # Model
         self.model = model.to(DEVICE)
@@ -164,8 +165,18 @@ class ConvNetAttentionTraining(nn.Module):
         raise ValueError("TBD")
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Argument parser for learning rate and number of iterations")
+    parser.add_argument("--lr", type=float, default=0.01, help="Learning rate for training")
+    parser.add_argument("--n_iter", type=int, default=1000, help="Number of iterations for training")
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    print("Test")
+
+    args = parse_arguments()
+    lr = float(args.lr)
+    n_iter = int(args.n_iter)
 
     # Load DataSet
     dataset_path = get_results_path() / "scemila" / "stardist_qupath_he_dapi_match_leiden_clustering" / "dataset.pkl"
@@ -176,7 +187,7 @@ if __name__ == "__main__":
     y = torch.Tensor(y)
 
     device = check_gpu()
-    model = CNNClassifierWithAttention(num_classes=num_class, in_dim=128, conv_type="resnet")
+    model = ImageClassificationModel(num_classes=num_class, in_dim=128, model_type="resnet", attention_layer=True)
 
     preprocess = transforms.Compose([
         transforms.ToTensor(),
@@ -191,18 +202,18 @@ if __name__ == "__main__":
         transforms.RandomHorizontalFlip(0.3)
     ])
 
-    training = ConvNetAttentionTraining(model,
-                                        batch_size=128,
-                                        lr=1e-3,
-                                        n_iter=500,
-                                        n_iter_min=100,
-                                        early_stopping=True,
-                                        n_iter_print=1,
-                                        patience=10,
-                                        preprocess=preprocess,
-                                        transforms=transforms,
-                                        clipping_value=0.0,
-                                        weight_decay=1e-4
-                                        )
+    training =  ImageClassificationTraining(model,
+                                            batch_size=128,
+                                            lr=lr,
+                                            n_iter=n_iter,
+                                            n_iter_min=100,
+                                            early_stopping=True,
+                                            n_iter_print=1,
+                                            patience=10,
+                                            preprocess=preprocess,
+                                            transforms=transforms,
+                                            clipping_value=0.0,
+                                            weight_decay=1e-4
+                                            )
 
     training.train_(X, y)

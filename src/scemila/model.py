@@ -9,6 +9,24 @@ import torchvision.models as models
 from src.utils import check_gpu
 
 
+class ImageClassificationModel(nn.Module):
+    def __init__(self, num_classes, model_type, in_dim, attention_layer):
+        super(ImageClassificationModel, self).__init__()
+
+        if model_type == "cnn":
+            self.model = CNNClassifierWithAttention(num_classes, in_dim, attention_layer)
+        elif model_type == "resnet":
+            resnet_model = "resnet50"
+            self.model = ResNetAttention(num_classes, in_dim, resnet_model, attention_layer)
+        elif model_type == "vit":
+            raise ValueError("Not Implemented")
+        else:
+            raise ValueError("Not a model type choose in [cnn, resnet, vit]")
+
+    def forward(self, x):
+        return self.model(x)
+
+
 class SelfAttention(nn.Module):
     def __init__(self, in_dim):
         super(SelfAttention, self).__init__()
@@ -29,45 +47,47 @@ class SelfAttention(nn.Module):
         out = self.gamma * out + x
         return out
 
+class VisionTransformer(nn.Module):
+    def __init__(self, num_classes):
+        super(VisionTransformer, self).__init__()
 
-class CNNClassifierWithAttention(nn.Module):
-    def __init__(self, num_classes, in_dim, conv_type="scracth"):
+        self.backbone = models.vit_base_patch16_224(pretrained=True)
 
-        super(CNNClassifierWithAttention, self).__init__()
+        # Replace classification head
+        self.backbone.head = nn.Linear(self.backbone.head.in_features, num_classes)
 
-        self.conv_type = conv_type
-        if self.conv_type == "conv":
-            self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
-            self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
-            self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
-            self.num_feature_maps = 128
-            self.self_attention = SelfAttention(self.num_feature_maps)
-            self.pool = nn.MaxPool2d(2, 2)
-        elif conv_type.lower() == "resnet":
+    def forward(self, x):
+        return self.backbone(x)
+
+
+class ResNetAttention(nn.Module):
+    def __init__(self, num_classes, in_dim, resnet_model="resnet50", attention_layer=True):
+        super(ResNetAttention, self).__init__()
+
+        assert resnet_model in ["resnet50"]
+
+        if resnet_model == "resnet50":
             self.conv = models.resnet50(pretrained=True)
             self.num_feature_maps = 2048
-            self.self_attention = SelfAttention(self.num_feature_maps)
             for param in self.conv.parameters():
                 param.requires_grad = False
             # Unfreeze last layer
             for param in self.conv.layer4.parameters():
                 param.requires_grad = True
-        elif conv_type.lower() == "vision-transformer":
-            pass
+        else:
+            raise ValueError("Not Implemented")
+
+        if attention_layer:
+            self.self_attention = SelfAttention(self.num_feature_maps)
+        else:
+            self.self_attention = nn.Identity()
 
         # Determine the output size after conv layers
         with torch.no_grad():
             x = torch.zeros(1, 3, in_dim, in_dim)
-            if self.conv_type == "conv":
-                x = self.pool(F.relu(self.conv1(x)))
-                x = self.pool(F.relu(self.conv2(x)))
-                x = self.self_attention(F.relu(self.conv3(x)))
-                self.feature_maps_dim = x.size(2)
-
-            elif self.conv_type == "resnet":
-                x = self.resnet_forward(x)
-                x = self.self_attention(x)
-                self.feature_maps_dim = x.size(2)
+            x = self.resnet_forward(x)
+            x = self.self_attention(x)
+            self.feature_maps_dim = x.size(2)
 
         self.fc1 = nn.Linear(self.num_feature_maps * self.feature_maps_dim * self.feature_maps_dim, 2048)
         self.fc2 = nn.Linear(2048, 512)
@@ -78,27 +98,60 @@ class CNNClassifierWithAttention(nn.Module):
         x = self.conv.bn1(x)
         x = self.conv.relu(x)
         x = self.conv.maxpool(x)
-
         x = self.conv.layer1(x)
         x = self.conv.layer2(x)
         x = self.conv.layer3(x)
         return self.conv.layer4(x)
 
     def forward(self, x):
+        x = self.resnet_forward(x)
+        x = self.self_attention(x)
+        x = x.view(x.size(0), -1)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        return self.fc3(x)
 
-        if self.conv_type == "conv":
+
+class CNNClassifierWithAttention(nn.Module):
+    def __init__(self, num_classes, in_dim, attention_layer=True):
+
+        super(CNNClassifierWithAttention, self).__init__()
+
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.pool = nn.MaxPool2d(2, 2)
+
+        self.num_feature_maps = 128
+        if attention_layer:
+            self.self_attention = SelfAttention(self.num_feature_maps)
+        else:
+            self.self_attention = nn.Identity()
+
+        # Determine the output size after conv layers
+        with torch.no_grad():
+            x = torch.zeros(1, 3, in_dim, in_dim)
             x = self.pool(F.relu(self.conv1(x)))
             x = self.pool(F.relu(self.conv2(x)))
-            x = F.relu(self.conv3(x))  # add adaptative pooling here ?
+            x = self.self_attention(F.relu(self.conv3(x)))
+            self.feature_maps_dim = x.size(2)
 
-        elif self.conv_type.lower() == "resnet":
-            x = self.resnet_forward(x)
+        self.fc1 = nn.Linear(self.num_feature_maps * self.feature_maps_dim * self.feature_maps_dim, 2048)
+        self.fc2 = nn.Linear(2048, 512)
+        self.fc3 = nn.Linear(512, num_classes)
+
+    def forward(self, x):
+
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = F.relu(self.conv3(x))  # add adaptative pooling here ?
 
         x = self.self_attention(x)
         x = x.view(x.size(0), -1)
         x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
+        x = F.relu(self.fc2(x))
+
+        return self.fc3(x)
 
 
 if __name__ == "__main__":
@@ -109,9 +162,11 @@ if __name__ == "__main__":
         dataset = pickle.load(file)
 
     device = check_gpu()
-    model = CNNClassifierWithAttention(num_classes=10, in_dim=96, conv_type="resnet").to(device)
+    model = ImageClassificationModel(num_classes=10, model_type="resnet", in_dim=96, attention_layer=True)
 
     print(model)
+
     example = torch.Tensor(np.transpose(dataset[0][0], axes=(2, 0, 1))).unsqueeze(0).to(device)
+    model.to(device)
 
     output = model(example)
