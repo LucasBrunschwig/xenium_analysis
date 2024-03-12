@@ -19,7 +19,7 @@ class ImageClassificationModel(nn.Module):
             resnet_model = "resnet50"
             self.model = ResNetAttention(num_classes, in_dim, resnet_model, attention_layer)
         elif model_type == "vit":
-            raise ValueError("Not Implemented")
+            self.model = VisionTransformer(num_classes)
         else:
             raise ValueError("Not a model type choose in [cnn, resnet, vit]")
 
@@ -47,14 +47,16 @@ class SelfAttention(nn.Module):
         out = self.gamma * out + x
         return out
 
+
 class VisionTransformer(nn.Module):
     def __init__(self, num_classes):
         super(VisionTransformer, self).__init__()
 
-        self.backbone = models.vit_base_patch16_224(pretrained=True)
+        self.backbone = models.vit_l_16(pretrained=True)
 
         # Replace classification head
-        self.backbone.head = nn.Linear(self.backbone.head.in_features, num_classes)
+        linear_layers = [nn.Linear(self.backbone.heads.head.in_features, 512), nn.ReLU(), nn.Linear(512, num_classes)]
+        self.backbone.heads = nn.Sequential(*linear_layers)
 
     def forward(self, x):
         return self.backbone(x)
@@ -162,7 +164,7 @@ if __name__ == "__main__":
         dataset = pickle.load(file)
 
     device = check_gpu()
-    model = ImageClassificationModel(num_classes=10, model_type="resnet", in_dim=96, attention_layer=True)
+    model = ImageClassificationModel(num_classes=10, model_type="vit", in_dim=96, attention_layer=True)
 
     print(model)
 
