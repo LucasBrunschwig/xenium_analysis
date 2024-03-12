@@ -177,6 +177,7 @@ def parse_arguments():
     parser.add_argument("--lr", type=float, default=0.01, help="Learning rate for training")
     parser.add_argument("--n_iter", type=int, default=1000, help="Number of iterations for training")
     parser.add_argument("--size", type=int, default=128, help="Number of iterations for training")
+    parser.add_argument("--model", type=str, default="resnet", help="[resnet, conv, vit]")
     return parser.parse_args()
 
 
@@ -186,6 +187,7 @@ if __name__ == "__main__":
     lr = float(args.lr)
     n_iter = int(args.n_iter)
     size = int(args.size)
+    model_type = str(args.model)
 
     # Load DataSet
     dataset_path = get_results_path() / "scemila" / "stardist_qupath_he_dapi_match_leiden_clustering" / "dataset.pkl"
@@ -196,7 +198,7 @@ if __name__ == "__main__":
     y = torch.Tensor(y)
 
     device = check_gpu()
-    model = ImageClassificationModel(num_classes=num_class, in_dim=size, model_type="resnet", attention_layer=True)
+    model = ImageClassificationModel(num_classes=num_class, in_dim=size, model_type=model_type, attention_layer=True)
 
     preprocess = transforms.Compose([
         transforms.ToTensor(),
