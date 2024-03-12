@@ -35,14 +35,27 @@ RESULTS_DIR_REF = RESULTS_DIR / "ref"
 os.makedirs(RESULTS_DIR_REF, exist_ok=True)
 
 
-def compute_ref_labels(adata, n_comp: int = 50, n_neighbors: int = 13):
+def compute_ref_labels(adata, n_comp: int = 50, n_neighbors: int = 13, variance_thrs=0.9):
+
     adata_ = adata.copy()
     sc.pp.pca(adata_, n_comps=n_comp)
-    sc.pp.neighbors(adata_, n_neighbors=n_neighbors)  # necessary for UMAP (k-neighbors with weights)
-    sc.tl.umap(adata_)
+
+    variance_explained = 0
+    n_pcs = 0
+    for ratio in adata_.uns["pca"]["variance_ratio"]:
+        variance_explained += ratio
+        n_pcs += 1
+        if variance_explained > variance_thrs:
+            break
+    print(f"Number of PCs for more than 0.9 variance explained: {n_pcs} - {variance_explained}")
+
+    # Compute leiden with neighbors
+    sc.pp.neighbors(adata_, n_neighbors=n_neighbors, n_pcs=n_pcs)  # necessary for UMAP (k-neighbors with weights)
     sc.tl.leiden(adata_)
 
-    return adata_.obs["leiden"].values.tolist()
+    # Project data to umap and visualize label
+    sc.tl.umap(adata_)
+    return adata_
 
 
 def main():
@@ -67,7 +80,7 @@ def main():
     for comp in n_comps:
         print(f"Adata Ref: {comp}")
         sc.pp.pca(adata_ref, n_comps=comp)
-        sc.pp.neighbors(adata_ref, n_neighbors=N_NEIGHBORS)  # necessary for UMAP (k-neighbors with weights)
+        sc.pp.neighbors(adata_ref, n_neighbors=N_NEIGHBORS) # necessary for UMAP (k-neighbors with weights)
         sc.tl.umap(adata_ref)
         sc.tl.leiden(adata_ref)
         sc.tl.rank_genes_groups(adata_ref, groupby="leiden")

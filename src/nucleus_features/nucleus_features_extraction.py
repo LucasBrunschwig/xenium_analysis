@@ -991,6 +991,8 @@ if __name__ == "__main__":
     run_nucleus_features_analysis = True
     test_nucleus_features_analysis = True
     sample = False
+    create_matrix = False
+
     # -------------------------------------------------------- #
     # Loading and Set Up
 
@@ -1004,24 +1006,31 @@ if __name__ == "__main__":
     aligned_image_path = get_human_breast_he_aligned_path()
     image_he = load_xenium_he_ome_tiff(aligned_image_path, level_=0)
 
-    path_background = get_geojson_masks("background_masks")
-    background = load_geojson_background(path_background)
-
-    # Load Custom Masks
-    masks = load_geojson_masks(get_geojson_masks(segmentation_method), background)
-
-    # Load Formatted Xenium Default Segmentation Masks
-    masks_xenium = load_xenium_masks(data_path, format="pixel", resolution=0.2125)
-
-    masks["nucleus_area"] = masks.polygon.apply(lambda c: c.area)
-    # Load Formatted Transcripts from Xenium
-    transcripts = load_xenium_transcriptomics(data_path)
-
-    # Create adata object for nucleus segmentation analysis with different segmentation
     adata_filename_custom = f"Xenium-BreastCancer1-nucleus_{segmentation_method}"
-    adata_custom = nucleus_transcripts_matrix_creation(masks, transcripts, background, results_dir, adata_filename_custom, sample)
     adata_filename_xenium = "Xenium-BreastCancer1-nucleus_xenium_segmentation"
-    adata_xenium = nucleus_transcripts_matrix_creation(masks_xenium, transcripts, background, results_dir, adata_filename_xenium, sample)
+
+    if create_matrix:
+        path_background = get_geojson_masks("background_masks")
+        background = load_geojson_background(path_background)
+
+        # Load Custom Masks
+        masks = load_geojson_masks(get_geojson_masks(segmentation_method), background)
+
+        # Load Formatted Xenium Default Segmentation Masks
+        masks_xenium = load_xenium_masks(data_path, format="pixel", resolution=0.2125)
+
+        masks["nucleus_area"] = masks.polygon.apply(lambda c: c.area)
+        # Load Formatted Transcripts from Xenium
+        transcripts = load_xenium_transcriptomics(data_path)
+
+        # Create adata object for nucleus segmentation analysis with different segmentation
+        adata_custom = nucleus_transcripts_matrix_creation(masks, transcripts, background, results_dir, adata_filename_custom, sample)
+        adata_xenium = nucleus_transcripts_matrix_creation(masks_xenium, transcripts, background, results_dir, adata_filename_xenium, sample)
+
+    else:
+        # Create adata object for nucleus segmentation analysis with different segmentation
+        adata_custom = sc.read_h5ad(results_dir / adata_filename_custom)
+        adata_xenium = sc.read_h5ad(results_dir / adata_filename_xenium)
 
     # -------------------------------------------------------- #
     # Main Analysis

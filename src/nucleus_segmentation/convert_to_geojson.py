@@ -7,7 +7,6 @@ from pathlib import Path
 
 def convert_to_geojson(masks_):
 
-    dict_data = {"type": "FeatureCollection", "features": []}
     feature_collection = []
     for mask in masks_:
         polygon = Polygon([[tuple((int(value[1]), int(value[0]))) for value in mask.T]])

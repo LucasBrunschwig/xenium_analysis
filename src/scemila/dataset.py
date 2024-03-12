@@ -41,6 +41,7 @@ from matplotlib.lines import Line2D
 # Relative imports
 from src.utils import preprocess_transcriptomics, load_xenium_he_ome_tiff, get_results_path, get_human_breast_he_aligned_path
 from src.nucleus_features.nucleus_features_extraction import create_masks_image
+from src.xenium_clustering.leiden_clustering import compute_ref_labels
 
 class CustomDataset(Dataset):
     def __init__(self, images, transform=None):
@@ -55,20 +56,6 @@ class CustomDataset(Dataset):
         if self.transform:
             img = self.transform(img)
         return img
-
-def compute_ref_labels(adata: sc.AnnData, n_comp: int = 50, n_neighbors: int = 13):
-    """ Leiden Clustering on the transcriptomcis contained inside the nucleus
-
-        Remark: the filter will return a subset of the adata objects -> use cell_id for consistency
-    """
-
-    adata_ = adata.copy()
-    sc.pp.pca(adata_, n_comps=n_comp)
-    sc.pp.neighbors(adata_, n_neighbors=n_neighbors)  # necessary for UMAP (k-neighbors with weights)
-    sc.tl.umap(adata_)
-    sc.tl.leiden(adata_)
-
-    return adata_
 
 
 def train_test(x, y):
@@ -127,6 +114,7 @@ def extract_patch(img_he_, masks_, save_dir: Path, patch_size_=None):
                 max_x += 1
             else:
                 min_x -= 1
+
         if max_y - min_y != patch_size_:
             if max_y < img_he_.shape[0] - 1:
                 max_y += 1
@@ -136,30 +124,6 @@ def extract_patch(img_he_, masks_, save_dir: Path, patch_size_=None):
         if min_x < 0 or min_y < 0 or max_x >= img_he_.shape[1] or max_y >= image_he.shape[0]:
             border_masks.append(ix)
             continue
-
-        # if min_x < 0:
-        #     print("min_x < 0:", min_x)
-        #     max_x -= min_x
-        #     min_x = 0
-        #
-        # elif min_y < 0:
-        #     print("min_y < 0:", min_y)
-        #     max_y -= min_y
-        #     min_y = 0
-        # elif max_x >= img_he_.shape[1]:
-        #     print(f"max_x > {img_he_.shape[1]}:", max_x)
-        #     min_x += (img_he_.shape[1] - 1 - max_x)
-        #     max_x = img_he_.shape[1] - 1
-        #
-        # elif max_y >= img_he_.shape[0]:
-        #     print(f"max_y > {img_he_.shape[0]}:", max_y)
-        #     min_y += (img_he_.shape[0] - 1 - max_y)
-        #     max_y = img_he_.shape[0] - 1
-        #
-        # elif max_y <= min_y:
-        #     print("inconsistent y")
-        # elif max_x <= min_x:
-        #     print("inconsistent x")
 
         patches.append(img_he_[min_y:max_y, min_x:max_x])
 
@@ -189,7 +153,7 @@ def visualize_projection(patch, labels, save_dir_):
     legend_elements = [Line2D([0], [0], marker='o', color='w', markerfacecolor=cmap(i), markersize=5, label=label)
                        for i, label in enumerate(np.sort(np.unique(labels)))]
 
-    # print("Starting Visualization")
+    print("Starting Visualization")
     # patch_mean = np.mean(patch, axis=3)
     # patch_flatten = patch_mean.reshape((patch_mean.shape[0], patch_mean.shape[1]*patch_mean.shape[2]))
     # mean_ = np.mean(patch_flatten, axis=0)
@@ -224,10 +188,8 @@ def visualize_projection(patch, labels, save_dir_):
 
     preprocess = transforms.Compose([
         transforms.ToPILImage(),  # Convert NumPy array to PIL image
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406 ], std=[0.229, 0.224, 0.225]),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
     model = get_resnet_()
@@ -279,6 +241,7 @@ def visualize_projection(patch, labels, save_dir_):
         plt.savefig(save_dir_ / f"umap_fos_resnet50_{neigh}.png")
         plt.close()
 
+
 def get_resnet_():
     resnet50 = models.resnet50(pretrained=True)
     resnet50.eval()
@@ -294,12 +257,13 @@ def save_dataset(patch, label, save_dir: Path):
         pickle.dump(dataset, file)
 
 
-def build_dataset(masks_adata_, img_he_, fractions_, save_path_: Path):
+def build_dataset(masks_adata_, img_he_, n_comp_, n_neighbor_, fractions_, save_path_: Path):
     """ """
     # Compute Labels
     cell_ids = masks_adata_.obs["cell_id"].copy()
-    masks_adata_filtered = preprocess_transcriptomics(masks_adata_,)
-    masks_adata_labels = compute_ref_labels(masks_adata_filtered)
+    masks_adata_filtered = preprocess_transcriptomics(masks_adata_)
+    masks_adata_labels = compute_ref_labels(masks_adata_filtered, n_comp=n_comp_, n_neighbors=n_neighbor_)
+    print(np.unique(masks_adata_labels.obs.leiden.to_numpy()))
 
     # Remove filtered cell's nucleus boundaries
     filtered_cell = set(cell_ids).difference(masks_adata_filtered.obs["cell_id"])
@@ -307,11 +271,11 @@ def build_dataset(masks_adata_, img_he_, fractions_, save_path_: Path):
     masks_adata_labels.uns["nucleus_boundaries_filtered"] = masks_adata_filtered.uns["nucleus_boundaries"][filtered_index]
 
     # Extract Corresponding patch
-    patches, border_ix = extract_patch(img_he_, masks_adata_labels.uns["nucleus_boundaries_filtered"], save_path_, patch_size_=124)
+    patches, border_ix = extract_patch(img_he_, masks_adata_labels.uns["nucleus_boundaries_filtered"], save_path_, patch_size_=96)
 
     labels = masks_adata_labels.obs["leiden"].astype(int).to_numpy()
     labels = [label for ix, label in enumerate(labels) if ix not in border_ix]
-    visualize_projection(patches, labels, save_path_)
+    # visualize_projection(patches, labels, save_path_)
 
     save_dataset(patches, labels, save_path_)
 
@@ -324,8 +288,10 @@ if __name__ == "__main__":
 
     # --------------------- #
     # Run Parameters
-    dataset_name = "stardist_qupath_leiden_clustering"
+    dataset_name = "stardist_qupath_he_dapi_match_leiden_clustering"
     fractions = [0.7, 0.15, 0.15]  # train, validation, test fraction
+    n_comp = 100
+    n_neighbor = 30
     # --------------------- #
 
     model = get_resnet_()
@@ -335,12 +301,14 @@ if __name__ == "__main__":
     os.makedirs(scemila_data_path, exist_ok=True)
 
     # Tmp path for debugging
-    masks_adata_path = Path("/Users/lbrunsch/Desktop/Phd/code/scratch/lbrunsch/results/nuclear_features/adata/Xenium-BreastCancer1-nucleus_stardist_qupath.h5ad")
+    masks_adata_path = Path("/Users/lbrunsch/Desktop/Phd/code/scratch/lbrunsch/results/segment_qupath/matching/adata/Xenium-BreastCancer_stardist_qupath_HE_DAPI_matched.h5ad")
     masks_adata = sc.read_h5ad(masks_adata_path)
+
+    masks_adata.uns["nucleus_boundaries"] = masks_adata.uns["he_nucleus_boundaries"]
 
     image_he_path = get_human_breast_he_aligned_path()
     image_he = load_xenium_he_ome_tiff(image_he_path, level_=0)
 
-    build_dataset(masks_adata, image_he, fractions, scemila_data_path)
+    build_dataset(masks_adata, image_he, n_comp, n_neighbor, fractions, scemila_data_path)
 
     x = load_dataset(dataset_name=dataset_name, sample=True)

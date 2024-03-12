@@ -12,6 +12,8 @@ import anndata
 import scanpy as sc
 import pandas as pd
 import gzip
+
+import shapely
 import squidpy as sq
 import numpy as np
 import tifffile
@@ -237,6 +239,14 @@ def load_xenium_masks(path: Path, format: Optional[str] = None, resolution: Opti
         return nucleus_boundaries
     else:
         raise ValueError("Format Unknown")
+
+
+def load_geojson_background(path: Path):
+    """ Create a MultiPolygon shapely to remove background mask"""
+    with open(path, "r") as file:
+        dict_ = json.load(file)
+    multipolygon = shapely.geometry.shape(dict_["features"][0]["geometry"])
+    return multipolygon
 
 
 def load_geojson_masks(path: Path, background_):
