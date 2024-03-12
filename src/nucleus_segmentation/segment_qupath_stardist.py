@@ -680,8 +680,7 @@ def visualize_clustering(adata, n_neighbors, n_pcas, results_dir):
             plt.savefig(str(results_dir / f"leiden_n_neighbors_{n_neighbor}_{n_pca}.png"))
             plt.tight_layout()
             plt.close()
-            #score = silhouette_score(adata_clustered.obsm['X_umap'], adata_clustered.obs['leiden'].to_numpy().astype(int))
-            score = 0.5
+            score = silhouette_score(adata_clustered.obsm['X_umap'], adata_clustered.obs['leiden'].to_numpy().astype(int))
             print(f"Silhouette score {results_dir}: {score}")
             if max_sil < score:
                 max_sil = score
@@ -696,17 +695,16 @@ def extract_marker_genes(adata, results_dir_):
 
     adata_cp = adata.copy()
     sc.tl.rank_genes_groups(adata_cp, groupby="leiden", inplace=True)
-    sc.pl.rank_genes_groups_heatmap(adata_cp, groupby="leiden", show=True, n_genes=5, show_gene_labels=True)
+    sc.pl.rank_genes_groups_heatmap(adata_cp, groupby="leiden", show=False, n_genes=5, show_gene_labels=True)
+    plt.tight_layout()
     plt.savefig(results_dir_ / "global_heatmap.png")
 
     marker_genes = []
     for label in adata.obs.leiden.unique():
         sc.pl.rank_genes_groups_heatmap(adata_cp, groups=label, groupby="leiden", show=False)
+        plt.tight_layout()
         plt.savefig(results_dir_ / f"heatmap_group_{label}")
         plt.close()
-        print(sc.get.rank_genes_groups_df(adata_cp, group=label).head(10))
-        # top_10_marker = sc.get.rank_genes_groups_df(adata_cp, group=label).iloc[:10, 0].tolist()
-        # print(top_10_marker)
         marker_genes.append(sc.get.rank_genes_groups_df(adata_cp, group=label))
 
     return adata_cp, marker_genes
@@ -748,7 +746,7 @@ if __name__ == "__main__":
     # Run Parameters
 
     run_segment_main = True
-    run_segment_test = True
+    run_segment_test = False
     run_type = "MATCHING"
     iou_threshold = 0.5
 
@@ -835,24 +833,29 @@ if __name__ == "__main__":
             adata_dapi = sc.read_h5ad(results_dir / "adata" / adata_filename_dapi)
 
         # Based on Optimization
-        n_neighbors = [30]
-        n_pcas = [100]
+        n_neighbors = [10]
+        n_pcas = [10]
         match_results = results_dir / "he_dapi_match_lab_meeting"
         os.makedirs(match_results, exist_ok=True)
 
         print("Running Script on DAPI-HE-Match")
         adata_match_labeled = visualize_clustering(adata_match, n_neighbors=n_neighbors, results_dir=match_results, n_pcas=n_pcas)
-        marker_genes = extract_marker_genes(adata_match_labeled, results_dir)
-        visualize_spatial_cluster(adata_match_labeled, image_he, results_dir)
+        extract_marker_genes(adata_match_labeled, match_results)
+        visualize_spatial_cluster(adata_match_labeled, image_he, match_results)
 
-        # he_results = results_dir / "he_lab_meeting"
-        # os.makedirs(he_results, exist_ok=True)
-        # print("Running Script on HE")
-        # visualize_clustering(adata_he, n_neighbors=n_neighbors, results_dir=he_results, n_pcas=n_pcas)
-        # dapi_results = results_dir / "dapi"
-        # os.makedirs(dapi_results, exist_ok=True)
-        # print("Running Script on DAPI")
-        # visualize_clustering(adata_dapi, n_neighbors=n_neighbors, results_dir=dapi_results, n_pcas=n_pcas)
+        he_results = results_dir / "he_lab_meeting"
+        os.makedirs(he_results, exist_ok=True)
+        print("Running Script on HE")
+        adata_he_labeled = visualize_clustering(adata_he, n_neighbors=n_neighbors, results_dir=he_results, n_pcas=n_pcas)
+        extract_marker_genes(adata_he_labeled, he_results)
+        visualize_spatial_cluster(adata_he_labeled, image_he, he_results)
+
+        dapi_results = results_dir / "dapi"
+        os.makedirs(dapi_results, exist_ok=True)
+        print("Running Script on DAPI")
+        adata_dapi_labeled = visualize_clustering(adata_dapi, n_neighbors=n_neighbors, results_dir=dapi_results, n_pcas=n_pcas)
+        extract_marker_genes(adata_dapi_labeled, dapi_results)
+        visualize_spatial_cluster(adata_dapi_labeled, image_he, he_results)
 
     elif run_segment_test:
 
