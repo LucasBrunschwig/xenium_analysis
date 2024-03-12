@@ -68,7 +68,7 @@ class ImageClassificationTraining(nn.Module):
         for i in range(self.n_iter):
             train_loss = []
             start_ = time.time()
-            progress_bar = tqdm(total=int(len(X) / self.batch_size), desc="Processing Batch")
+            progress_bar = tqdm(total=np.ceil(train_size / self.batch_size), desc="Processing Batch")
             for batch_ndx, sample in enumerate(loader):
                 progress_bar.update(1)
                 self.optimizer.zero_grad()
