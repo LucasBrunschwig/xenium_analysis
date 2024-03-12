@@ -5,7 +5,7 @@ from torch import nn
 import time
 import pandas as pd
 import numpy as np
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
 import pickle
 
@@ -14,6 +14,7 @@ from tqdm import tqdm
 from src.utils import check_gpu, get_results_path
 from src.scemila.custom_dataset import TrainingImageDataset, TestImageDataset
 from src.scemila.model import ImageClassificationModel
+from sklearn.model_selection import StratifiedShuffleSplit
 
 DEVICE = check_gpu()
 
@@ -49,14 +50,20 @@ class ImageClassificationTraining(nn.Module):
             X, y, preprocess=self.preprocess, transform=self.transforms
         )
 
-        train_size = int(0.8 * len(dataset))
-        val_size = len(dataset) - train_size
-        train_size = len(dataset) - val_size
+        # Define the train-validation split ratio
+        train_ratio = 0.85
 
-        train_dataset, val_dataset = torch.utils.data.random_split(dataset, lengths=[train_size, val_size])
+        # Split the dataset while maintaining class distribution
+        splitter = StratifiedShuffleSplit(n_splits=1, train_size=train_ratio)
+        train_indices, val_indices = next(splitter.split(dataset.targets, dataset.targets))
 
-        loader = DataLoader(train_dataset, batch_size=self.batch_size, pin_memory=True)
-        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, pin_memory=True)
+        # Create subsets for training and validation
+        train_dataset = Subset(dataset, train_indices)
+        val_dataset = Subset(dataset, val_indices)
+
+        # Create DataLoader for training and validation
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, prefetch_factor=3, num_workers=4)
+        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False, prefetch_factor=3, num_workers=4)
 
         # do training
         val_loss_best = 999999
@@ -68,8 +75,8 @@ class ImageClassificationTraining(nn.Module):
         for i in range(self.n_iter):
             train_loss = []
             start_ = time.time()
-            progress_bar = tqdm(total=np.ceil(train_size / self.batch_size), desc="Processing Batch")
-            for batch_ndx, sample in enumerate(loader):
+            progress_bar = tqdm(total=np.ceil(len(train_indices) / self.batch_size), desc="Processing Batch")
+            for batch_ndx, sample in enumerate(train_loader):
                 progress_bar.update(1)
                 self.optimizer.zero_grad()
 
@@ -203,7 +210,7 @@ if __name__ == "__main__":
     ])
 
     training =  ImageClassificationTraining(model,
-                                            batch_size=128,
+                                            batch_size=512,
                                             lr=lr,
                                             n_iter=n_iter,
                                             n_iter_min=100,

@@ -23,16 +23,16 @@ class TrainingImageDataset(Dataset):
         preprocess (callable): Preprocessing to be applied to image after optional transformation
         transform (callable, optional): Optional transformations to be applied to the images. Default is None.
         """
-        self.image = data
-        self.target = target
+        self._image = data
+        self._target = target
         self.transform = transform
         self.preprocess = preprocess
 
     def __len__(self):
-        return len(self.image)
+        return len(self._image)
 
     def __getitem__(self, index):
-        image, label = self.image[index], self.target[index]
+        image, label = self._image[index], self._target[index]
 
         if self.transform:
             image = self.transform(image)
@@ -41,6 +41,13 @@ class TrainingImageDataset(Dataset):
 
         return image, label
 
+    @property
+    def targets(self):
+        return self._target
+
+    @property
+    def images(self):
+        return self._image
 
 class TestImageDataset(Dataset):
     def __init__(self, data, preprocess):
