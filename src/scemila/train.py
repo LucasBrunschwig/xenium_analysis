@@ -10,7 +10,7 @@ import pickle
 
 from tqdm import tqdm
 
-from src.utils import check_gpu
+from src.utils import check_gpu, get_results_path
 from src.scemila.custom_dataset import TrainingImageDataset, TestImageDataset
 from src.scemila.model import CNNClassifierWithAttention
 
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     print("Test")
 
     # Load DataSet
-    dataset_path = "/Users/lbrunsch/Desktop/Phd/code/scratch/lbrunsch/results/scemila/stardist_qupath_he_dapi_match_leiden_clustering/dataset.pkl"
+    dataset_path = get_results_path() / "scemila" / "stardist_qupath_he_dapi_match_leiden_clustering" / "dataset.pkl"
     with open(dataset_path, "rb") as file:
         X, y = pickle.load(file)
 
