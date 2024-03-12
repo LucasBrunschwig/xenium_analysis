@@ -173,3 +173,5 @@ if __name__ == "__main__":
     model.to(device)
 
     output = model(example)
+
+    print(output)
