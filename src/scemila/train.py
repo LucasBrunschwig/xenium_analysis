@@ -214,7 +214,7 @@ if __name__ == "__main__":
     ])
 
     training =  ImageClassificationTraining(model,
-                                            batch_size=512,
+                                            batch_size=128,
                                             lr=lr,
                                             n_iter=n_iter,
                                             n_iter_min=100,
