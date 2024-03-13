@@ -220,7 +220,7 @@ if __name__ == "__main__":
                                             n_iter_min=100,
                                             early_stopping=True,
                                             n_iter_print=1,
-                                            patience=10,
+                                            patience=2,
                                             preprocess=preprocess,
                                             transforms=transforms,
                                             clipping_value=0.0,
