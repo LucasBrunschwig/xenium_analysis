@@ -52,7 +52,7 @@ class VisionTransformer(nn.Module):
     def __init__(self, num_classes):
         super(VisionTransformer, self).__init__()
 
-        self.backbone = models.vit_b_16(pretrained=True)
+        self.backbone = models.vit_b_32(weights="DEFAULT")
 
         # Replace classification head
         linear_layers = [nn.Linear(self.backbone.heads.head.in_features, 512), nn.ReLU(), nn.Linear(512, num_classes)]
@@ -168,7 +168,6 @@ if __name__ == "__main__":
 
     print(model)
 
-    example = torch.Tensor(np.transpose(dataset[0][0], axes=(2, 0, 1))).unsqueeze(0).to(device)
     example = torch.zeros(1, 3, 224, 224).to(device)
     model.to(device)
 

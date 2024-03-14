@@ -213,18 +213,18 @@ if __name__ == "__main__":
         transforms.RandomHorizontalFlip(0.3)
     ])
 
-    training =  ImageClassificationTraining(model,
-                                            batch_size=256,
-                                            lr=lr,
-                                            n_iter=n_iter,
-                                            n_iter_min=100,
-                                            early_stopping=True,
-                                            n_iter_print=1,
-                                            patience=2,
-                                            preprocess=preprocess,
-                                            transforms=transforms,
-                                            clipping_value=0.0,
-                                            weight_decay=1e-4
-                                            )
+    training = ImageClassificationTraining(model,
+                                           batch_size=256,
+                                           lr=lr,
+                                           n_iter=n_iter,
+                                           n_iter_min=100,
+                                           early_stopping=True,
+                                           n_iter_print=1,
+                                           patience=2,
+                                           preprocess=preprocess,
+                                           transforms=transforms,
+                                           clipping_value=0.0,
+                                           weight_decay=1e-4
+                                           )
 
-    training.train_(X, y)
+    losses = training.train_(X, y)
