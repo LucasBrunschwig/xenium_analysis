@@ -434,7 +434,7 @@ def check_gpu():
     device = None
     if torch.cuda.is_available():
         print("GPU available", torch.cuda.current_device())
-        device = torch.device("cuda:1")
+        device = torch.device("cuda")
     elif torch.backends.mps.is_available():
         device = torch.device("mps")
         print("MPS Device Found")

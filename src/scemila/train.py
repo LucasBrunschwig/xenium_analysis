@@ -190,6 +190,7 @@ def parse_arguments():
     parser.add_argument("--size", type=int, default=128, help="Number of iterations for training")
     parser.add_argument("--model", type=str, default="resnet", help="[resnet, conv, vit]")
     parser.add_argument("--dataset", type=str, default=None, help="pickle file")
+    parser.add_argument("--gpu", type=int, default=0, help="gpu number")
 
     return parser.parse_args()
 
@@ -217,6 +218,7 @@ if __name__ == "__main__":
     size = int(args.size)
     model_type = str(args.model)
     dataset_name = str(args.dataset)
+    gpu_number = int(args.gpu)
 
     training_params = {"lr": lr, "n_iter": n_iter, "size": size, "model_type": model_type}
     model_name = f"model_{lr}_{n_iter}_{size}_{model_type}+{dataset_name}"
@@ -245,7 +247,7 @@ if __name__ == "__main__":
     num_class = len(np.unique(y))
     y = torch.Tensor(y)
 
-    device = check_gpu()
+    device = torch.device(f"cuda:{gpu_number}")
 
     attention_layer = True
     model = ImageClassificationModel(num_classes=num_class, in_dim=size, model_type=model_type, attention_layer=attention_layer)
