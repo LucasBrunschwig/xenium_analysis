@@ -73,8 +73,8 @@ class ImageClassificationTraining(nn.Module):
         val_dataset = Subset(dataset, val_indices)
 
         # Create DataLoader for training and validation
-        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, prefetch_factor=3, num_workers=4, drop_last=True)
+        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False, prefetch_factor=3, num_workers=4, drop_last=True)
 
         # do training
         val_loss_best = 999999
@@ -251,7 +251,7 @@ if __name__ == "__main__":
     ])
 
     training = ImageClassificationTraining(model,
-                                           batch_size=256,
+                                           batch_size=512,
                                            lr=lr,
                                            n_iter=n_iter,
                                            n_iter_min=100,
