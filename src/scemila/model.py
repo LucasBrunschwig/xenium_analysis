@@ -55,7 +55,7 @@ class VisionTransformer(nn.Module):
     def __init__(self, num_classes):
         super(VisionTransformer, self).__init__()
 
-        self.backbone = models.vit_b_32(weights="DEFAULT")
+        self.backbone = models.vit_b_16(weights="DEFAULT")
 
         # Replace classification head
         linear_layers = [nn.Linear(self.backbone.heads.head.in_features, 512), nn.ReLU(), nn.Linear(512, num_classes)]

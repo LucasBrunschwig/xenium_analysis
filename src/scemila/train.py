@@ -216,7 +216,7 @@ if __name__ == "__main__":
     model_type = str(args.model)
 
     training_params = {"lr": lr, "n_iter": n_iter, "size": size, "model_type": model_type}
-    model_name = f"model_{lr}_{n_iter}_{size}_{model_type}"
+    model_name = f"model_{lr}_{n_iter}_{size}_{model_type}_16"
 
     results_dir = build_dir()
     model_dir = results_dir / model_name
@@ -263,13 +263,13 @@ if __name__ == "__main__":
     ])
 
     training = ImageClassificationTraining(model,
-                                           batch_size=512,
+                                           batch_size=256,
                                            lr=lr,
                                            n_iter=n_iter,
                                            n_iter_min=10,
                                            early_stopping=True,
                                            n_iter_print=1,
-                                           patience=2,
+                                           patience=3,
                                            preprocess=preprocess,
                                            transforms=transforms,
                                            clipping_value=0.0,
