@@ -23,7 +23,7 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 DEVICE = check_gpu()
 
-logger.add(sys.stdout, format="{time} {level} {message}", level="INFO")
+
 
 
 class ImageClassificationTraining(nn.Module):
@@ -220,6 +220,7 @@ if __name__ == "__main__":
     model_dir = results_dir / model_name
     os.makedirs(model_dir, exist_ok=True)
 
+    logger.add(sys.stdout, format="{time} {level} {message}", level="INFO", filter=filter_out_loss_training)
     logger.add(f"{model_dir}/file.log", format="{message}", level="INFO", filter=filter_out_loss_training)
     logger.add(f"{model_dir}/train.log", format="{message}", level="INFO", filter=filter_loss_training)
 
