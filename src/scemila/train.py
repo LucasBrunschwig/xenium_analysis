@@ -144,11 +144,9 @@ class ImageClassificationTraining(nn.Module):
 
                     if i % self.n_iter_print == 0:
                         train_loss_mean = torch.mean(train_loss)
-                        logger.info(
-                            f"Epoch: {i}, val_loss: {val_loss:.4f}, train_loss: {train_loss_mean:.4f}, epoch elapsed time: {(end_ - start_):.2f}"
-                        )
+                        logger.info(f"Epoch: {i}, val_loss: {val_loss:.4f}, train_loss: {train_loss_mean:.4f}, epoch elapsed time: {(end_ - start_):.2f}")
                     # write this by default to get
-                    logger.debug(f"loss::{i},{val_loss},{train_loss_mean}")
+                    logger.info(f"loss::{i},{val_loss},{train_loss_mean}")
 
         return self
 
@@ -198,6 +196,14 @@ def build_dir():
     return Path(dir_)
 
 
+def filter_loss_training(record):
+    return record["message"].startswith("loss::")
+
+
+def filter_out_loss_training(record):
+    return not record["message"].startswith("loss::")
+
+
 if __name__ == "__main__":
 
     # Parse arguments
@@ -213,8 +219,9 @@ if __name__ == "__main__":
     results_dir = build_dir()
     model_dir = results_dir / model_name
     os.makedirs(model_dir, exist_ok=True)
-    logger.add(f"{model_dir}/file.log", format="{message}", level="INFO")
-    logger.add(f"{model_dir}/train.log", format="{message}", level="DEBUG")
+
+    logger.add(f"{model_dir}/file.log", format="{message}", level="INFO", filter=filter_out_loss_training)
+    logger.add(f"{model_dir}/train.log", format="{message}", level="INFO", filter=filter_loss_training)
 
     logger.info(f"Starting training and saving info to: file_{lr}_{n_iter}_{size}_{model_type}.log")
 
