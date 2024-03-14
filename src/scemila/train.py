@@ -125,28 +125,30 @@ class ImageClassificationTraining(nn.Module):
                         preds = self.model.forward(X_val_next)
                         val_loss.append(loss(preds, y_val_next).detach())
 
-                    val_loss = torch.mean(torch.Tensor(val_loss))
+                val_loss = torch.mean(torch.Tensor(val_loss))
 
-                    end_ = time.time()
+                end_ = time.time()
 
-                    if self.early_stopping:
-                        if val_loss_best > val_loss:
-                            val_loss_best = val_loss
-                            patience = 0
-                        else:
-                            patience += 1
+                train_loss_mean = torch.mean(train_loss)
+                logger.info(f"loss::{i},{val_loss},{train_loss_mean}")
 
-                        if patience > self.patience and i > self.n_iter_min:
-                            logger.info(
-                                f"Final Epoch: {i}, val_loss: {val_loss:.4f}, train_loss: {torch.mean(train_loss):.4f}"
-                            )
-                            break
-
-                    if i % self.n_iter_print == 0:
-                        train_loss_mean = torch.mean(train_loss)
-                        logger.info(f"Epoch: {i}, val_loss: {val_loss:.4f}, train_loss: {train_loss_mean:.4f}, epoch elapsed time: {(end_ - start_):.2f}")
+                if i % self.n_iter_print == 0:
+                    logger.info(
+                        f"Epoch: {i}, val_loss: {val_loss:.4f}, train_loss: {train_loss_mean:.4f}, epoch elapsed time: {(end_ - start_):.2f}")
                     # write this by default to get
-                    logger.info(f"loss::{i},{val_loss},{train_loss_mean}")
+
+                if self.early_stopping:
+                    if val_loss_best > val_loss:
+                        val_loss_best = val_loss
+                        patience = 0
+                    else:
+                        patience += 1
+
+                    if patience > self.patience and i > self.n_iter_min:
+                        logger.info(
+                            f"Final Epoch: {i}, val_loss: {val_loss:.4f}, train_loss: {torch.mean(train_loss):.4f}"
+                        )
+                        break
 
         return self
 
