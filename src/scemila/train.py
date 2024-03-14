@@ -222,7 +222,7 @@ if __name__ == "__main__":
 
     for handler_id in logger._core.handlers:
         logger.remove(handler_id)
-    logger.add(sys.stdout, format="{time:YYYY:MM:DD:HH:mm} | {level} | {message}", level="INFO", filter=filter_out_loss_training)
+    logger.add(sys.stdout, format="{time:YYYY:MM:DD:HH:mm} | {level} | {message}", level="INFO", filter=filter_out_loss_training, colorize=True)
     logger.add(f"{model_dir}/file.log", format="{message}", level="INFO", filter=filter_out_loss_training)
     logger.add(f"{model_dir}/train.log", format="{message}", level="INFO", filter=filter_loss_training)
 
