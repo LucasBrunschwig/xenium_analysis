@@ -73,8 +73,8 @@ class ImageClassificationTraining(nn.Module):
         val_dataset = Subset(dataset, val_indices)
 
         # Create DataLoader for training and validation
-        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, prefetch_factor=3, num_workers=4)
-        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False, prefetch_factor=3, num_workers=4)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
 
         # do training
         val_loss_best = 999999
@@ -95,7 +95,7 @@ class ImageClassificationTraining(nn.Module):
                 X_next = X_next.to(DEVICE)
                 y_next = y_next.to(DEVICE)
 
-                preds = self.model.forward(X_next).squeeze()
+                preds = self.model.forward(X_next)
 
                 batch_loss = loss(preds, y_next)
 
@@ -122,7 +122,7 @@ class ImageClassificationTraining(nn.Module):
                         X_val_next = X_val_next.to(DEVICE)
                         y_val_next = y_val_next.to(DEVICE)
 
-                        preds = self.model.forward(X_val_next).squeeze()
+                        preds = self.model.forward(X_val_next)
                         val_loss.append(loss(preds, y_val_next).detach())
 
                     val_loss = torch.mean(torch.Tensor(val_loss))
@@ -251,7 +251,7 @@ if __name__ == "__main__":
     ])
 
     training = ImageClassificationTraining(model,
-                                           batch_size=512,
+                                           batch_size=256,
                                            lr=lr,
                                            n_iter=n_iter,
                                            n_iter_min=100,
