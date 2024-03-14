@@ -26,6 +26,9 @@ class ImageClassificationModel(nn.Module):
     def forward(self, x):
         return self.model(x)
 
+    def save(self, dir_):
+        torch.save(self.state_dict(), dir_ / "model_parameters.pth")
+
 
 class SelfAttention(nn.Module):
     def __init__(self, in_dim):

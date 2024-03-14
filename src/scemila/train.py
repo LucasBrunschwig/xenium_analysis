@@ -1,5 +1,9 @@
 import argparse
+import json
+import os
+from pathlib import Path
 
+from loguru import logger
 import torch
 from torch import nn
 import time
@@ -8,6 +12,7 @@ import numpy as np
 from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
 import pickle
+import sys
 
 from tqdm import tqdm
 
@@ -18,10 +23,12 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 DEVICE = check_gpu()
 
+logger.add(sys.stdout, format="{time} {level} {message}", level="INFO")
+
 
 class ImageClassificationTraining(nn.Module):
     def __init__(self, model, batch_size, lr, n_iter, n_iter_min, early_stopping, n_iter_print, patience,
-                 preprocess, transforms, clipping_value, weight_decay):
+                 preprocess, transforms, clipping_value, weight_decay, results_dir):
         super(ImageClassificationTraining, self).__init__()
 
         # Model
@@ -36,11 +43,15 @@ class ImageClassificationTraining(nn.Module):
         self.patience = patience
         self.clipping_value = clipping_value
         self.early_stopping = early_stopping
+        self.results_dir = results_dir
+
+        # Create
 
         # Preprocessing and Data Augmentation
         self.preprocess = preprocess
         self.transforms = transforms
 
+        # Optimizer
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=weight_decay)
 
     def train_(self, X: torch.Tensor, y: torch.Tensor):
@@ -126,15 +137,18 @@ class ImageClassificationTraining(nn.Module):
                             patience += 1
 
                         if patience > self.patience and i > self.n_iter_min:
-                            print(
-                                f"Final Epoch: {i}, loss: {val_loss:.4f}, train_loss: {torch.mean(train_loss):.4f}"
+                            logger.info(
+                                f"Final Epoch: {i}, val_loss: {val_loss:.4f}, train_loss: {torch.mean(train_loss):.4f}"
                             )
                             break
 
                     if i % self.n_iter_print == 0:
-                        print(
-                            f"Epoch: {i}, loss: {val_loss:.4f}, train_loss: {torch.mean(train_loss):.4f}, epoch elapsed time: {(end_ - start_):.2f}"
+                        train_loss_mean = torch.mean(train_loss)
+                        logger.info(
+                            f"Epoch: {i}, val_loss: {val_loss:.4f}, train_loss: {train_loss_mean:.4f}, epoch elapsed time: {(end_ - start_):.2f}"
                         )
+                    # write this by default to get
+                    logger.debug(f"loss::{i},{val_loss},{train_loss_mean}")
 
         return self
 
@@ -168,9 +182,6 @@ class ImageClassificationTraining(nn.Module):
         else:
             return torch.from_numpy(np.asarray(X)).cpu()
 
-    def save(self):
-        raise ValueError("TBD")
-
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Argument parser for learning rate and number of iterations")
@@ -181,13 +192,35 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def build_dir():
+    dir_ = "training"
+    os.makedirs(dir_, exist_ok=True)
+    return Path(dir_)
+
+
 if __name__ == "__main__":
 
+    # Parse arguments
     args = parse_arguments()
     lr = float(args.lr)
     n_iter = int(args.n_iter)
     size = int(args.size)
     model_type = str(args.model)
+
+    training_params = {"lr": lr, "n_iter": n_iter, "size": size, "model_type": model_type}
+    model_name = f"model_{lr}_{n_iter}_{size}_{model_type}"
+
+    results_dir = build_dir()
+    model_dir = results_dir / model_name
+    os.makedirs(model_dir, exist_ok=True)
+    logger.add(f"{model_dir}/file.log", format="{message}", level="INFO")
+    logger.add(f"{model_dir}/train.log", format="{message}", level="DEBUG")
+
+    logger.info(f"Starting training and saving info to: file_{lr}_{n_iter}_{size}_{model_type}.log")
+
+    # saving model params
+    with open(model_dir / "training_params.json", "w") as file:
+        json.dump(training_params, file)
 
     # Load DataSet
     dataset_path = get_results_path() / "scemila" / "stardist_qupath_he_dapi_match_leiden_clustering" / "dataset.pkl"
@@ -198,7 +231,11 @@ if __name__ == "__main__":
     y = torch.Tensor(y)
 
     device = check_gpu()
-    model = ImageClassificationModel(num_classes=num_class, in_dim=size, model_type=model_type, attention_layer=True)
+    attention_layer = True
+    model = ImageClassificationModel(num_classes=num_class, in_dim=size, model_type=model_type, attention_layer=attention_layer)
+    model_params = {"num_classes": num_class, "in_dim": size, "model_type": model_type, "attention_layer": attention_layer}
+    with open(model_dir / "model_params.json", "w") as file:
+        json.dump(model_params, file)
 
     preprocess = transforms.Compose([
         transforms.ToTensor(),
@@ -224,7 +261,11 @@ if __name__ == "__main__":
                                            preprocess=preprocess,
                                            transforms=transforms,
                                            clipping_value=0.0,
-                                           weight_decay=1e-4
+                                           weight_decay=1e-4,
+                                           results_dir=model_dir
                                            )
 
-    losses = training.train_(X, y)
+    training.train_(X, y)
+
+    logger.info("Saving Model: to model_parameters.pth")
+    model.save(model_dir)
