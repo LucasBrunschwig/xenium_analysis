@@ -266,7 +266,7 @@ if __name__ == "__main__":
                                            batch_size=512,
                                            lr=lr,
                                            n_iter=n_iter,
-                                           n_iter_min=100,
+                                           n_iter_min=10,
                                            early_stopping=True,
                                            n_iter_print=1,
                                            patience=2,
