@@ -189,6 +189,8 @@ def parse_arguments():
     parser.add_argument("--n_iter", type=int, default=1000, help="Number of iterations for training")
     parser.add_argument("--size", type=int, default=128, help="Number of iterations for training")
     parser.add_argument("--model", type=str, default="resnet", help="[resnet, conv, vit]")
+    parser.add_argument("--dataset", type=str, default=None, help="pickle file")
+
     return parser.parse_args()
 
 
@@ -214,9 +216,10 @@ if __name__ == "__main__":
     n_iter = int(args.n_iter)
     size = int(args.size)
     model_type = str(args.model)
+    dataset_name = str(args.dataset)
 
     training_params = {"lr": lr, "n_iter": n_iter, "size": size, "model_type": model_type}
-    model_name = f"model_{lr}_{n_iter}_{size}_{model_type}_16"
+    model_name = f"model_{lr}_{n_iter}_{size}_{model_type}+{dataset_name}"
 
     results_dir = build_dir()
     model_dir = results_dir / model_name
@@ -228,14 +231,14 @@ if __name__ == "__main__":
     logger.add(f"{model_dir}/file.log", format="{message}", level="INFO", filter=filter_out_loss_training)
     logger.add(f"{model_dir}/train.log", format="{message}", level="INFO", filter=filter_loss_training)
 
-    logger.info(f"Starting training and saving info to: file_{lr}_{n_iter}_{size}_{model_type}.log")
+    logger.info(f"Starting training and saving info to: {model_name}")
 
     # saving model params
     with open(model_dir / "training_params.json", "w") as file:
         json.dump(training_params, file)
 
     # Load DataSet
-    dataset_path = get_results_path() / "scemila" / "stardist_qupath_he_dapi_match_leiden_clustering" / "dataset.pkl"
+    dataset_path = get_results_path() / "scemila" / "datasets" / dataset_name
     with open(dataset_path, "rb") as file:
         X, y = pickle.load(file)
 
@@ -243,6 +246,7 @@ if __name__ == "__main__":
     y = torch.Tensor(y)
 
     device = check_gpu()
+
     attention_layer = True
     model = ImageClassificationModel(num_classes=num_class, in_dim=size, model_type=model_type, attention_layer=attention_layer)
     model_params = {"num_classes": num_class, "in_dim": size, "model_type": model_type, "attention_layer": attention_layer}

@@ -18,8 +18,8 @@ class ImageClassificationModel(nn.Module):
         elif model_type == "resnet":
             resnet_model = "resnet50"
             self.model = ResNetAttention(num_classes, in_dim, resnet_model, attention_layer)
-        elif model_type == "vit":
-            self.model = VisionTransformer(num_classes)
+        elif "vit" in model_type:
+            self.model = VisionTransformer(num_classes, model_type)
         else:
             raise ValueError("Not a model type choose in [cnn, resnet, vit]")
 
@@ -28,6 +28,9 @@ class ImageClassificationModel(nn.Module):
 
     def save(self, dir_):
         torch.save(self.state_dict(), dir_ / "model_parameters.pth")
+
+    def load(self, dir_):
+        self.load_state_dict(torch.load(dir_ / "model_parameters.pth"))
 
 
 class SelfAttention(nn.Module):
@@ -52,10 +55,16 @@ class SelfAttention(nn.Module):
 
 
 class VisionTransformer(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, model_type):
         super(VisionTransformer, self).__init__()
 
-        self.backbone = models.vit_b_16(weights="DEFAULT")
+        assert model_type in ["vit_16", "vit_32"]
+
+        self.model_type = model_type
+        if model_type == "vit_16":
+            self.backbone = models.vit_b_16(weights="DEFAULT")
+        else:
+            self.backbone = models.vit_b_32(weights="DEFAULT")
 
         # Replace classification head
         linear_layers = [nn.Linear(self.backbone.heads.head.in_features, 512), nn.ReLU(), nn.Linear(512, num_classes)]

@@ -30,7 +30,7 @@ from PIL import Image
 from shapely import Polygon
 import scanpy as sc
 from sklearn.decomposition import PCA
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
 import torchvision.models as models
 import torchvision.transforms as transforms
 from torch import nn
@@ -39,7 +39,8 @@ from tqdm import tqdm
 from matplotlib.lines import Line2D
 
 # Relative imports
-from src.utils import preprocess_transcriptomics, load_xenium_he_ome_tiff, get_results_path, get_human_breast_he_aligned_path
+from src.utils import (preprocess_transcriptomics, load_xenium_he_ome_tiff, get_results_path,
+                       get_human_breast_he_aligned_path, get_human_breast_he_path)
 from src.nucleus_features.nucleus_features_extraction import create_masks_image
 from src.xenium_clustering.leiden_clustering import compute_ref_labels
 
@@ -71,7 +72,7 @@ def create_polygon(x_, y_):
     return Polygon(stack)
 
 
-def extract_patch(img_he_, masks_, save_dir: Path, patch_size_=None):
+def extract_patch(img_, masks_, save_dir: Path, patch_size_=None):
     """ This function takes as input an image and return a list of patches corresponding to masks
 
         Strategy:
@@ -110,29 +111,29 @@ def extract_patch(img_he_, masks_, save_dir: Path, patch_size_=None):
         max_y = int(polygon.centroid.y + patch_size_ // 2)
 
         if max_x - min_x != patch_size_:
-            if max_x < img_he_.shape[1] - 1:
+            if max_x < img_.shape[1] - 1:
                 max_x += 1
             else:
                 min_x -= 1
 
         if max_y - min_y != patch_size_:
-            if max_y < img_he_.shape[0] - 1:
+            if max_y < img_.shape[0] - 1:
                 max_y += 1
             else:
                 min_y -= 1
 
-        if min_x < 0 or min_y < 0 or max_x >= img_he_.shape[1] or max_y >= image_he.shape[0]:
+        if min_x < 0 or min_y < 0 or max_x >= img_.shape[1] or max_y >= img_.shape[0]:
             border_masks.append(ix)
             continue
 
-        patches.append(img_he_[min_y:max_y, min_x:max_x])
+        patches.append(img_[min_y:max_y, min_x:max_x])
 
         if viz_count < viz_count_max and random.uniform(0, 1) > 0.9:
             try:
                 viz_count += 1
                 coords_ = np.array(polygon.exterior.coords)
                 plt.plot(coords_[:, 0] - min_x, coords_[:, 1] - min_y)
-                plt.imshow(img_he_[min_y:max_y, min_x:max_x])
+                plt.imshow(img_[min_y:max_y, min_x:max_x])
                 plt.savefig(viz_dir / f"visualization_{viz_count}.png")
                 plt.close()
             except:
@@ -251,13 +252,13 @@ def get_resnet_():
     return nn.Sequential(*layers)
 
 
-def save_dataset(patch, label, save_dir: Path):
+def save_dataset(patch, label, save_dir: Path, dataset_name_: str):
     dataset = [patch, label]
-    with open(save_dir / "dataset.pkl", "wb") as file:
+    with open(save_dir / dataset_name_, "wb") as file:
         pickle.dump(dataset, file)
 
 
-def build_dataset(masks_adata_, img_he_, n_comp_, n_neighbor_, fractions_, save_path_: Path):
+def build_dataset(dataset_name, masks_adata_, img_he_, n_comp_, n_neighbor_, train_fraction_, save_path_: Path, visualize: bool = False):
     """ """
     # Compute Labels
     cell_ids = masks_adata_.obs["cell_id"].copy()
@@ -271,44 +272,53 @@ def build_dataset(masks_adata_, img_he_, n_comp_, n_neighbor_, fractions_, save_
     masks_adata_labels.uns["nucleus_boundaries_filtered"] = masks_adata_filtered.uns["nucleus_boundaries"][filtered_index]
 
     # Extract Corresponding patch
-    patches, border_ix = extract_patch(img_he_, masks_adata_labels.uns["nucleus_boundaries_filtered"], save_path_, patch_size_=96)
+    patches, border_ix = extract_patch(img_he_, masks_adata_labels.uns["nucleus_boundaries_filtered"], save_path_,
+                                       patch_size_=96)
 
     labels = masks_adata_labels.obs["leiden"].astype(int).to_numpy()
-    labels = [label for ix, label in enumerate(labels) if ix not in border_ix]
-    # visualize_projection(patches, labels, save_path_)
+    labels = np.array([label for ix, label in enumerate(labels) if ix not in border_ix])
 
-    save_dataset(patches, labels, save_path_)
+    if visualize:
+        visualize_projection(patches, labels, save_path_)
 
+    # Split the dataset while maintaining class distribution
+    splitter = StratifiedShuffleSplit(n_splits=1, train_size=train_fraction_)
+    train_indices, test_indices = next(splitter.split(labels, labels))
 
-def load_dataset(dataset_name: str, sample: bool):
-    return 0
+    train_name = f"{dataset_name}_train.pkl"
+    save_dataset(patches[train_indices], labels[train_indices], save_path_, train_name)
+
+    train_name = f"{dataset_name}_test.pkl"
+    save_dataset(patches[test_indices], labels[test_indices], save_path_, train_name)
 
 
 if __name__ == "__main__":
 
     # --------------------- #
     # Run Parameters
-    dataset_name = "stardist_qupath_he_dapi_match_leiden_clustering"
-    fractions = [0.7, 0.15, 0.15]  # train, validation, test fraction
+    fractions = 0.9  # train, validation, test fraction
     n_comp = 100
     n_neighbor = 30
+    image_type = "DAPI"
+    iou_range = "0.5-1.0"
+    dataset_name = f"stardist_qupath_patch-{image_type}_iou-{iou_range}_pca-{n_comp}_neigh_{n_neighbor}"
     # --------------------- #
 
     model = get_resnet_()
 
     save_path = get_results_path()
-    scemila_data_path = save_path / "scemila" / dataset_name
+    scemila_data_path = save_path / "scemila" / "datasets"
     os.makedirs(scemila_data_path, exist_ok=True)
 
     # Tmp path for debugging
     masks_adata_path = Path("/Users/lbrunsch/Desktop/Phd/code/scratch/lbrunsch/results/segment_qupath/matching/adata/Xenium-BreastCancer_stardist_qupath_HE_DAPI_matched.h5ad")
     masks_adata = sc.read_h5ad(masks_adata_path)
 
-    masks_adata.uns["nucleus_boundaries"] = masks_adata.uns["he_nucleus_boundaries"]
-
-    image_he_path = get_human_breast_he_aligned_path()
-    image_he = load_xenium_he_ome_tiff(image_he_path, level_=0)
-
-    build_dataset(masks_adata, image_he, n_comp, n_neighbor, fractions, scemila_data_path)
-
-    x = load_dataset(dataset_name=dataset_name, sample=True)
+    if image_type == "HE":
+        masks_adata.uns["nucleus_boundaries"] = masks_adata.uns["he_nucleus_boundaries"]
+        image_he_path = get_human_breast_he_aligned_path()
+        image = load_xenium_he_ome_tiff(image_he_path, level_=0)
+    else:
+        image_dapi_path = get_human_breast_he_path() / 'morphology_mip.ome.tif'
+        image = load_xenium_he_ome_tiff(image_dapi_path, level_=0)
+    build_dataset(dataset_name, masks_adata, image, n_comp, n_neighbor, fractions, scemila_data_path)

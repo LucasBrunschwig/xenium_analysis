@@ -230,15 +230,19 @@ def test_matching(masks_he_, masks_dapi_, dapi_img_, he_img_, results_dir_):
     """
 
     # Create Visualization sub-directories
-    results_dir_ = results_dir_
-    os.makedirs(results_dir_ / "0_3-0_4", exist_ok=True)
-    os.makedirs(results_dir_ / "0_4-0_5", exist_ok=True)
-    os.makedirs(results_dir_ / "0_5-0_6", exist_ok=True)
-    os.makedirs(results_dir_ / "0_6-0_7", exist_ok=True)
-    os.makedirs(results_dir_ / "0_7-0_8", exist_ok=True)
-    os.makedirs(results_dir_ / "0_8-0_9", exist_ok=True)
-    os.makedirs(results_dir_ / "0_9-1_0", exist_ok=True)
-    os.makedirs(results_dir_ / "no_match", exist_ok=True)
+    example_dir_ = results_dir_ / "example"
+    os.makedirs(example_dir_, exist_ok=True)
+    plot_dir = results_dir_ / "plot"
+    os.makedirs(plot_dir, exist_ok=True)
+
+    os.makedirs(example_dir_ / "0_3-0_4", exist_ok=True)
+    os.makedirs(example_dir_ / "0_4-0_5", exist_ok=True)
+    os.makedirs(example_dir_ / "0_5-0_6", exist_ok=True)
+    os.makedirs(example_dir_ / "0_6-0_7", exist_ok=True)
+    os.makedirs(example_dir_ / "0_7-0_8", exist_ok=True)
+    os.makedirs(example_dir_ / "0_8-0_9", exist_ok=True)
+    os.makedirs(example_dir_ / "0_9-1_0", exist_ok=True)
+    os.makedirs(example_dir_ / "no_match", exist_ok=True)
 
     # Keep max and min values
     min_dapi = np.min(dapi_img_)
@@ -273,7 +277,7 @@ def test_matching(masks_he_, masks_dapi_, dapi_img_, he_img_, results_dir_):
                     iou = mask_dapi.intersection(mask_he).area / mask_dapi.union(mask_he).area
                     ious.append(iou)
                     ious_index.append(j)
-                    if viz_count < 300:
+                    if viz_count < 0:
                         viz_count += 1
                         bounds = np.vstack((np.array(mask_dapi.bounds), np.array(mask_he.bounds)))
                         bounds_min = np.min(bounds[:, [0, 1]], axis=0).astype(int)
@@ -312,7 +316,7 @@ def test_matching(masks_he_, masks_dapi_, dapi_img_, he_img_, results_dir_):
                             handles, labels = axs[0].get_legend_handles_labels()
                             fig.legend(handles, labels, loc='upper right')
                             plt.tight_layout()
-                            plt.savefig(results_dir_ / cat / f"example_{i}.png")
+                            plt.savefig(example_dir_ / cat / f"example_{i}.png")
                         plt.close()
 
             # If there is a confirmed intersection
@@ -361,7 +365,7 @@ def test_matching(masks_he_, masks_dapi_, dapi_img_, he_img_, results_dir_):
 
     viz_no_match = 0
     for i in no_match:
-        if viz_no_match < 100:
+        if viz_no_match < 0:
             viz_no_match += 1
             mask = masks_he_df.iloc[i].polygon
             bounds = np.array(mask.bounds)
@@ -379,7 +383,7 @@ def test_matching(masks_he_, masks_dapi_, dapi_img_, he_img_, results_dir_):
             [ax.plot(np.array(mask.exterior.coords)[:, 0], np.array(mask.exterior.coords)[:, 1],
                      'g', zorder=2, label="he segment") for ax in axs]
 
-            plt.savefig(results_dir_ / "no_match" / f"example_{i}.png")
+            plt.savefig(example_dir_ / "no_match" / f"example_{i}.png")
             plt.close()
 
     total_length = [len(values) for i, values in enumerate(area_nucleus.values()) if i > 0]
@@ -426,7 +430,7 @@ def test_matching(masks_he_, masks_dapi_, dapi_img_, he_img_, results_dir_):
     blue_patch = mpatches.Patch(color='blue', label='HE segmentation')
     red_patch = mpatches.Patch(color='red', label='DAPI segmentation')
     plt.legend(handles=[blue_patch, red_patch])
-    plt.savefig(results_dir_ / "size_distribution_iou_stat_test.png")
+    plt.savefig(plot_dir / "size_distribution_iou_stat_test.png")
     plt.close()
 
     plt.figure(figsize=(20, 6))
@@ -452,7 +456,7 @@ def test_matching(masks_he_, masks_dapi_, dapi_img_, he_img_, results_dir_):
     plt.xticks(positions, list(area_nucleus.keys()))
     plt.title("H&E nucleus size distribution comparison")
     plt.tight_layout()
-    plt.savefig(results_dir_ / "size_distribution_he_iou_stat_test.png")
+    plt.savefig(plot_dir / "size_distribution_he_iou_stat_test.png")
 
     # ------------------------------------------------------------------------------------------------------------ #
     # Visualize Nucleus area distribution versus iou bins
@@ -472,7 +476,7 @@ def test_matching(masks_he_, masks_dapi_, dapi_img_, he_img_, results_dir_):
     plt.title('Nucleus Area Distribution by IOU bins')
     plt.xticks(rotation=45)
     plt.tight_layout()
-    plt.savefig(results_dir_ / "iou_bin_he.png")
+    plt.savefig(plot_dir / "iou_bin_he.png")
     plt.close()
 
     # ------------------------------------------------------------------------------------------------------------ #
@@ -507,7 +511,7 @@ def test_matching(masks_he_, masks_dapi_, dapi_img_, he_img_, results_dir_):
         plt.text(i+0.5, 1.4, f"p_val: {p_val:.2e}", ha='center', va='center', fontsize=9)
 
     plt.tight_layout()
-    plt.savefig(results_dir_ / "iou_bin_perc_he.png")
+    plt.savefig(plot_dir / "iou_bin_perc_he.png")
     plt.close()
 
     # ------------------------------------------------------------------------------------------------------------ #
@@ -537,7 +541,60 @@ def test_matching(masks_he_, masks_dapi_, dapi_img_, he_img_, results_dir_):
     plt.xticks(index, categories)
     plt.legend()
     plt.tight_layout()
-    plt.savefig(results_dir_ / "contains_bin_he.png")
+    plt.savefig(plot_dir / "contains_bin_he.png")
+    plt.close()
+
+    # ------------------------------------------------------------------------------------------------------------ #
+    # Visualize iou versus nucleus area
+
+    area_bins = 5
+    dfs = [[] for _ in range(area_bins)]
+    bins = np.unique(pd.qcut([value for values in area_nucleus.values() for value in values], area_bins))
+    for i, (key, values) in enumerate(area_nucleus.items()):
+        sub_bins = pd.cut(values, bins)
+        values_cut = pd.DataFrame(values)
+        values_cut["cut"] = sub_bins
+        for j in range(area_bins):
+            values_sub = values_cut[values_cut.cut == bins[j]][0].tolist()
+            df = pd.DataFrame({"IOU bin": key + f"_({len(values_sub)})", "Data": values_sub})
+            dfs[j].append(df)
+    fig, ax = plt.subplots(nrows=area_bins, ncols=1, figsize=(14, 8))
+    for i, dfs_col in enumerate(dfs):
+        data_df = pd.concat(dfs_col)
+        sns.violinplot(x='IOU bin', y='Data', data=data_df, ax=ax[i])
+        ax[i].set_ylabel(f"{bins[i]}")
+    ax_ = ax[-1]
+    ax_.set_xlabel('IOU bin')
+    fig.suptitle('Nucleus Area Distribution by IOU bins')
+    plt.tight_layout()
+    plt.savefig(plot_dir / "area_iou_bin_he.png")
+    plt.close()
+
+    # ------------------------------------------------------------------------------------------------------------ #
+    # Visualize iou versus nucleus area
+    del area_nucleus["no_match"]
+    area_bins = 5
+    dfs = [[] for _ in range(area_bins)]
+    bins = np.unique(pd.qcut([value for values in area_nucleus.values() for value in values], area_bins))
+    for (key, values), (key_area, values_area) in zip(contained_perc.items(), area_nucleus.items()):
+        sub_bins = pd.cut(values_area, bins)
+        values_cut = pd.DataFrame(values)
+        values_cut["cut"] = sub_bins
+        for j in range(area_bins):
+            values_sub = values_cut[values_cut.cut == bins[j]][0].tolist()
+            df = pd.DataFrame({"IOU bin": key + f"_({len(values_sub)})", "Data": values_sub})
+            dfs[j].append(df)
+    fig, ax = plt.subplots(nrows=area_bins, ncols=1, figsize=(14, 10))
+    for i, dfs_col in enumerate(dfs):
+        data_df = pd.concat(dfs_col)
+        sns.violinplot(x='IOU bin', y='Data', data=data_df, ax=ax[i])
+        ax[i].set_ylabel(f"{bins[i]}")
+        ax[i].set_ylim(-0.2, 1.2)
+    ax_ = ax[-1]
+    ax_.set_xlabel('IOU bin')
+    fig.suptitle('Area of HE contained in DAPI by IOU bins')
+    plt.tight_layout()
+    plt.savefig(plot_dir / "area_iou_bin_perc_contained_he.png")
     plt.close()
 
     # ------------------------------------------------------------------------------------------------------------ #
@@ -745,8 +802,8 @@ if __name__ == "__main__":
     # ---------------------------------------------------- #
     # Run Parameters
 
-    run_segment_main = True
-    run_segment_test = False
+    run_segment_main = False
+    run_segment_test = True
     run_type = "MATCHING"
     iou_threshold = 0.5
 
@@ -833,9 +890,12 @@ if __name__ == "__main__":
             adata_dapi = sc.read_h5ad(results_dir / "adata" / adata_filename_dapi)
 
         # Based on Optimization
-        n_neighbors = [10]
-        n_pcas = [10]
-        match_results = results_dir / "he_dapi_match_lab_meeting"
+        n_neighbors = [10, 30, 50]
+        n_pcas = [10, 50, 100, 200, 300]
+        clustering_dir = results_dir / "clustering"
+        os.makedirs(clustering_dir, exist_ok=True)
+
+        match_results = clustering_dir / "he_dapi_match"
         os.makedirs(match_results, exist_ok=True)
 
         print("Running Script on DAPI-HE-Match")
@@ -843,14 +903,14 @@ if __name__ == "__main__":
         extract_marker_genes(adata_match_labeled, match_results)
         visualize_spatial_cluster(adata_match_labeled, image_he, match_results)
 
-        he_results = results_dir / "he_lab_meeting"
+        he_results = clustering_dir / "he_lab"
         os.makedirs(he_results, exist_ok=True)
         print("Running Script on HE")
         adata_he_labeled = visualize_clustering(adata_he, n_neighbors=n_neighbors, results_dir=he_results, n_pcas=n_pcas)
         extract_marker_genes(adata_he_labeled, he_results)
         visualize_spatial_cluster(adata_he_labeled, image_he, he_results)
 
-        dapi_results = results_dir / "dapi"
+        dapi_results = clustering_dir / "dapi"
         os.makedirs(dapi_results, exist_ok=True)
         print("Running Script on DAPI")
         adata_dapi_labeled = visualize_clustering(adata_dapi, n_neighbors=n_neighbors, results_dir=dapi_results, n_pcas=n_pcas)
