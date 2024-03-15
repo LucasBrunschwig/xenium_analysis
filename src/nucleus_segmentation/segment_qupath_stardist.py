@@ -734,8 +734,8 @@ def visualize_clustering(adata, n_neighbors, n_pcas, results_dir):
         for n_pca in n_pcas:
             adata_clustered = compute_ref_labels(adata_pre, n_neighbors=n_neighbor, n_comp=n_pca)
             _ = sc.pl.umap(adata_clustered, color='leiden', show=False)
-            plt.savefig(str(results_dir / f"leiden_n_neighbors_{n_neighbor}_{n_pca}.png"))
             plt.tight_layout()
+            plt.savefig(str(results_dir / f"leiden_n_neighbors_{n_neighbor}_{n_pca}.png"))
             plt.close()
             score = silhouette_score(adata_clustered.obsm['X_umap'], adata_clustered.obs['leiden'].to_numpy().astype(int))
             print(f"Silhouette score {results_dir}: {score}")
@@ -757,10 +757,12 @@ def extract_marker_genes(adata, results_dir_):
     plt.savefig(results_dir_ / "global_heatmap.png")
 
     marker_genes = []
-    for label in adata.obs.leiden.unique():
+    for label in np.sort(adata.obs.leiden.unique().astype(int)):
+        label = str(label)
         sc.pl.rank_genes_groups_heatmap(adata_cp, groups=label, groupby="leiden", show=False)
         plt.tight_layout()
         plt.savefig(results_dir_ / f"heatmap_group_{label}")
+        plt.tight_layout()
         plt.close()
         marker_genes.append(sc.get.rank_genes_groups_df(adata_cp, group=label))
 
@@ -802,8 +804,8 @@ if __name__ == "__main__":
     # ---------------------------------------------------- #
     # Run Parameters
 
-    run_segment_main = False
-    run_segment_test = True
+    run_segment_main = True
+    run_segment_test = False
     run_type = "MATCHING"
     iou_threshold = 0.5
 
@@ -890,8 +892,8 @@ if __name__ == "__main__":
             adata_dapi = sc.read_h5ad(results_dir / "adata" / adata_filename_dapi)
 
         # Based on Optimization
-        n_neighbors = [10, 30, 50]
-        n_pcas = [10, 50, 100, 200, 300]
+        n_neighbors = [30]
+        n_pcas = [100]
         clustering_dir = results_dir / "clustering"
         os.makedirs(clustering_dir, exist_ok=True)
 
@@ -900,7 +902,8 @@ if __name__ == "__main__":
 
         print("Running Script on DAPI-HE-Match")
         adata_match_labeled = visualize_clustering(adata_match, n_neighbors=n_neighbors, results_dir=match_results, n_pcas=n_pcas)
-        extract_marker_genes(adata_match_labeled, match_results)
+        adata_match_labeled_marker, marker_genes_match = extract_marker_genes(adata_match_labeled, match_results)
+        [print(marker.head(5)) for marker in marker_genes_match]
         visualize_spatial_cluster(adata_match_labeled, image_he, match_results)
 
         he_results = clustering_dir / "he_lab"

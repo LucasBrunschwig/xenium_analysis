@@ -21,6 +21,7 @@ import random
 from pathlib import Path
 import os
 
+import cv2
 import matplotlib.pyplot as plt
 # Third Party
 import numpy as np
@@ -258,7 +259,7 @@ def save_dataset(patch, label, save_dir: Path, dataset_name_: str):
         pickle.dump(dataset, file)
 
 
-def build_dataset(dataset_name, masks_adata_, img_he_, n_comp_, n_neighbor_, train_fraction_, save_path_: Path, visualize: bool = False):
+def build_dataset(dataset_name, masks_adata_, img_he_, n_comp_, n_neighbor_, train_fraction_, save_path_: Path, img_type: str, visualize: bool = False):
     """ """
     # Compute Labels
     cell_ids = masks_adata_.obs["cell_id"].copy()
@@ -273,7 +274,7 @@ def build_dataset(dataset_name, masks_adata_, img_he_, n_comp_, n_neighbor_, tra
 
     # Extract Corresponding patch
     patches, border_ix = extract_patch(img_he_, masks_adata_labels.uns["nucleus_boundaries_filtered"], save_path_,
-                                       patch_size_=96)
+                                       patch_size_=None)
 
     labels = masks_adata_labels.obs["leiden"].astype(int).to_numpy()
     labels = np.array([label for ix, label in enumerate(labels) if ix not in border_ix])
@@ -321,4 +322,7 @@ if __name__ == "__main__":
     else:
         image_dapi_path = get_human_breast_he_path() / 'morphology_mip.ome.tif'
         image = load_xenium_he_ome_tiff(image_dapi_path, level_=0)
-    build_dataset(dataset_name, masks_adata, image, n_comp, n_neighbor, fractions, scemila_data_path)
+        image = cv2.normalize(image, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+
+    build_dataset(dataset_name, masks_adata, image, n_comp, n_neighbor, fractions, scemila_data_path, image_type)

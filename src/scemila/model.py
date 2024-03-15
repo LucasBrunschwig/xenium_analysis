@@ -26,11 +26,15 @@ class ImageClassificationModel(nn.Module):
     def forward(self, x):
         return self.model(x)
 
+    def extract_feature(self, layer_name):
+        self.model.extract_feature(layer_name)
+
     def save(self, dir_):
         torch.save(self.state_dict(), dir_ / "model_parameters.pth")
 
     def load(self, dir_):
-        self.load_state_dict(torch.load(dir_ / "model_parameters.pth"))
+        state_dict = torch.load(dir_ / "model_parameters.pth", map_location=torch.device('cpu'))
+        self.load_state_dict(state_dict)
 
 
 class SelfAttention(nn.Module):
@@ -73,6 +77,8 @@ class VisionTransformer(nn.Module):
     def forward(self, x):
         return self.backbone(x)
 
+    def extract_feature(self, layer_name, hook):
+        self.backbone.encoder.get_laregister_forward_hook(hook)
 
 class ResNetAttention(nn.Module):
     def __init__(self, num_classes, in_dim, resnet_model="resnet50", attention_layer=True):
