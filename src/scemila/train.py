@@ -23,9 +23,6 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 DEVICE = check_gpu()
 
-
-
-
 class ImageClassificationTraining(nn.Module):
     def __init__(self, model, batch_size, lr, n_iter, n_iter_min, early_stopping, n_iter_print, patience,
                  preprocess, transforms, clipping_value, weight_decay, results_dir):
@@ -247,8 +244,8 @@ if __name__ == "__main__":
     num_class = len(np.unique(y))
     y = torch.Tensor(y)
 
-    device = torch.device(f"cuda:{gpu_number}")
-    print(device)
+    global DEVICE
+    DEVICE = torch.device(f"cuda:{gpu_number}")
 
     attention_layer = True
     model = ImageClassificationModel(num_classes=num_class, in_dim=size, model_type=model_type, attention_layer=attention_layer)
