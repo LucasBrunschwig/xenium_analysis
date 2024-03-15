@@ -248,6 +248,7 @@ if __name__ == "__main__":
     y = torch.Tensor(y)
 
     device = torch.device(f"cuda:{gpu_number}")
+    print(device)
 
     attention_layer = True
     model = ImageClassificationModel(num_classes=num_class, in_dim=size, model_type=model_type, attention_layer=attention_layer)
