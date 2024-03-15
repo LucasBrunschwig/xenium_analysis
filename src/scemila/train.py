@@ -21,8 +21,6 @@ from src.scemila.custom_dataset import TrainingImageDataset, TestImageDataset
 from src.scemila.model import ImageClassificationModel
 from sklearn.model_selection import StratifiedShuffleSplit
 
-DEVICE = check_gpu()
-
 class ImageClassificationTraining(nn.Module):
     def __init__(self, model, batch_size, lr, n_iter, n_iter_min, early_stopping, n_iter_print, patience,
                  preprocess, transforms, clipping_value, weight_decay, results_dir):
