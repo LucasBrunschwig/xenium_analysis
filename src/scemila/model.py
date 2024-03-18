@@ -67,6 +67,14 @@ class VisionTransformer(nn.Module):
         self.model_type = model_type
         if model_type == "vit_16":
             self.backbone = models.vit_b_16(weights="DEFAULT")
+            # Freeze the network
+            for parameters in self.backbone.parameters():
+                parameters.requires_grad = False
+            for params in self.backbone.encoder.ln.parameters():
+                params.requires_grad = True
+            for params in self.backbone.encoder.layers.encoder_layer_11.parameters():
+                params.requires_grad = True
+            # Unfreeze layer 9
         else:
             self.backbone = models.vit_b_32(weights="DEFAULT")
 
