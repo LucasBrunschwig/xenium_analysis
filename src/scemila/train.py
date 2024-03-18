@@ -186,6 +186,7 @@ def parse_arguments():
     parser.add_argument("--model", type=str, default="resnet", help="[resnet, conv, vit]")
     parser.add_argument("--dataset", type=str, default=None, help="pickle file")
     parser.add_argument("--gpu", type=int, default=0, help="gpu number")
+    parser.add_argument("--patience", type=int, default=10, help="patience number")
 
     return parser.parse_args()
 
@@ -214,6 +215,7 @@ if __name__ == "__main__":
     model_type = str(args.model)
     dataset_name = str(args.dataset)
     gpu_number = int(args.gpu)
+    patience = int(args.patience)
 
     training_params = {"lr": lr, "n_iter": n_iter, "size": size, "model_type": model_type}
     model_name = f"model_{lr}_{n_iter}_{size}_{model_type}+{dataset_name}"
@@ -271,10 +273,10 @@ if __name__ == "__main__":
                                            n_iter_min=10,
                                            early_stopping=True,
                                            n_iter_print=1,
-                                           patience=3,
+                                           patience=patience,
                                            preprocess=preprocess,
                                            transforms=transforms,
-                                           clipping_value=0.0,
+                                           clipping_value=1.0,
                                            weight_decay=1e-4,
                                            results_dir=model_dir
                                            )
