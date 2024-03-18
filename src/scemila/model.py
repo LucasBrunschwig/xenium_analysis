@@ -71,7 +71,15 @@ class VisionTransformer(nn.Module):
             self.backbone = models.vit_b_32(weights="DEFAULT")
 
         # Replace classification head
-        linear_layers = [nn.Linear(self.backbone.heads.head.in_features, 512), nn.ReLU(), nn.Linear(512, num_classes)]
+        linear_layers = [nn.Linear(self.backbone.heads.head.in_features, 512),
+                         nn.BatchNorm1d(512),
+                         nn.ReLU(),
+                         nn.Dropout(0.5),
+                         nn.Linear(512, 256),
+                         nn.BatchNorm1d(256),
+                         nn.ReLU(),
+                         nn.Dropout(0.5),
+                         nn.Linear(256, num_classes)]
         self.backbone.heads = nn.Sequential(*linear_layers)
 
     def forward(self, x):
@@ -79,6 +87,7 @@ class VisionTransformer(nn.Module):
 
     def extract_feature(self, layer_name, hook):
         self.backbone.encoder.get_laregister_forward_hook(hook)
+
 
 class ResNetAttention(nn.Module):
     def __init__(self, num_classes, in_dim, resnet_model="resnet50", attention_layer=True):
@@ -176,13 +185,8 @@ class CNNClassifierWithAttention(nn.Module):
 
 if __name__ == "__main__":
 
-    # Load DataSet
-    dataset_path = "/Users/lbrunsch/Desktop/Phd/code/scratch/lbrunsch/results/scemila/stardist_qupath_he_dapi_match_leiden_clustering/dataset.pkl"
-    with open(dataset_path, "rb") as file:
-        dataset = pickle.load(file)
-
     device = check_gpu()
-    model = ImageClassificationModel(num_classes=10, model_type="vit", in_dim=96, attention_layer=True)
+    model = ImageClassificationModel(num_classes=10, model_type="vit_16", in_dim=96, attention_layer=True)
 
     print(model)
 
