@@ -1,5 +1,6 @@
 import json
 import os
+import pickle
 from functools import partial
 from loguru import logger
 import optuna
@@ -60,10 +61,10 @@ def objective(trial, model_params, training_params, x, y, model, training):
 
 def optuna_optimization(model, training, X, y, model_params, training_params, save_dir, study_name):
 
-    with open(save_dir / "model_params.json", "w") as file:
-        json.dump(model_params, file)
-    with open(save_dir / "training_params.json", "w") as file:
-        json.dump(training_params, file)
+    with open(save_dir / "model_params.json", "wb") as file:
+        pickle.dump(model_params, file)
+    with open(save_dir / "training_params.json", "wb") as file:
+        pickle.dump(training_params, file)
 
     # Create a study object and specify the optimization direction as 'minimize'.
     study = optuna.create_study(study_name=study_name, direction="minimize",
