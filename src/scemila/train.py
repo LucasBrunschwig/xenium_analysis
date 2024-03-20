@@ -80,6 +80,7 @@ class ImageClassificationTraining(nn.Module):
 
         loss = nn.CrossEntropyLoss()
         val_loss = np.inf
+        train_loss = np.inf
         for i in range(self.n_iter):
             train_loss = []
             start_ = time.time()
@@ -112,7 +113,7 @@ class ImageClassificationTraining(nn.Module):
             progress_bar.close()
             train_loss = torch.Tensor(train_loss).to(DEVICE)
 
-            if self.early_stopping or i % self.n_iter_print == 0:
+            if self.early_stopping or i % self.n_iter_print == 0 or i == self.n_iter - 1:
                 with torch.no_grad():
 
                     val_loss = []
@@ -132,6 +133,7 @@ class ImageClassificationTraining(nn.Module):
                 train_loss_mean = torch.mean(train_loss)
 
                 logger.info(f"loss::{i},{val_loss},{train_loss_mean}")
+
                 if i % self.n_iter_print == 0:
                     logger.info(f"Epoch: {i}, val_loss: {val_loss:.4f}, train_loss: {train_loss_mean:.4f}, epoch elapsed time: {(end_ - start_):.2f}")
 
@@ -148,7 +150,7 @@ class ImageClassificationTraining(nn.Module):
                         )
                         break
 
-        return val_loss
+        return val_loss, train_loss
 
     def test(self, X):
         self.model.to(DEVICE)
@@ -313,7 +315,8 @@ if __name__ == "__main__":
         optuna_dir = results_dir / "optuna"
         os.makedirs(optuna_dir, exist_ok=True)
 
-        save_study = optuna_dir / (f"{model_type}" + dataset_name + f"+{date.today()}")
+        study_name = f"{model_type}+{dataset_name}+{date.today()}"
+        save_study = optuna_dir / study_name
         os.makedirs(save_study, exist_ok=True)
 
         set_up_logger_optuna(save_study)
@@ -344,4 +347,4 @@ if __name__ == "__main__":
         }
 
         optuna_optimization(ImageClassificationModel, ImageClassificationTraining, X, y,
-                            model_params_definition, training_params_definition, save_study, dataset_name)
+                            model_params_definition, training_params_definition, save_study, study_name)

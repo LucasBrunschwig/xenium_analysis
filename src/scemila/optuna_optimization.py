@@ -48,10 +48,17 @@ def objective(trial, model_params, training_params, x, y, model, training):
     params_tr["model"] = model_instance
     training_instance = training(**params_tr)
 
-    return training_instance.train_(x, y)
+    # Train the model
+    val_loss, train_loss = training_instance.train_(x, y)
+
+    # Store loss
+    print(f"Model final loss: train-{train_loss}, val-{val_loss}")
+    logger.info(f"model loss: {train_loss}:{val_loss}")
+
+    return val_loss
 
 
-def optuna_optimization(model, training, X, y, model_params, training_params, save_dir, dataset_name):
+def optuna_optimization(model, training, X, y, model_params, training_params, save_dir, study_name):
 
     with open(save_dir / "model_params.json", "w") as file:
         json.dump(model_params, file)
@@ -59,10 +66,10 @@ def optuna_optimization(model, training, X, y, model_params, training_params, sa
         json.dump(training_params, file)
 
     # Create a study object and specify the optimization direction as 'minimize'.
-    study = optuna.create_study(study_name=dataset_name, direction="minimize",
+    study = optuna.create_study(study_name=study_name, direction="minimize",
                                 storage=f"sqlite:///{save_dir}/trial.db")
 
-    logger.info(f"Starting study with: {dataset_name} - stored in {save_dir}/trial.db")
+    logger.info(f"Starting study with: {study_name} - stored in {save_dir}/trial.db")
 
     # Start the optimization; the number of trials can be adjusted
     objective_with_params = partial(objective, model_params=model_params, training_params=training_params,
