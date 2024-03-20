@@ -336,8 +336,8 @@ if __name__ == "__main__":
                 "early_stopping": [True],
                 "results_dir": [optuna_dir],
                 "n_iter_min": [10],
-                "n_iter_print": [10],
-                "n_iter": [200],
+                "n_iter_print": [1],
+                "n_iter": [5],
                 # Optimization Parameters
                 "batch_size": [[128, 256, 512], "categorical"],
                 "patience": [[3, 5, 10], "categorical"],
