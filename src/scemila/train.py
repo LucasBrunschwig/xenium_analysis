@@ -313,7 +313,7 @@ if __name__ == "__main__":
         optuna_dir = results_dir / "optuna"
         os.makedirs(optuna_dir, exist_ok=True)
 
-        save_study = optuna_dir / (dataset_name + f"+{date.today()}")
+        save_study = optuna_dir / (f"{model_type}" + dataset_name + f"+{date.today()}")
         os.makedirs(save_study, exist_ok=True)
 
         set_up_logger_optuna(save_study)
