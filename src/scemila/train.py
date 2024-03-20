@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+from datetime import date
 from pathlib import Path
 
 from loguru import logger
@@ -127,12 +128,10 @@ class ImageClassificationTraining(nn.Module):
                 end_ = time.time()
 
                 train_loss_mean = torch.mean(train_loss)
-                logger.info(f"loss::{i},{val_loss},{train_loss_mean}")
 
+                logger.info(f"loss::{i},{val_loss},{train_loss_mean}")
                 if i % self.n_iter_print == 0:
-                    logger.info(
-                        f"Epoch: {i}, val_loss: {val_loss:.4f}, train_loss: {train_loss_mean:.4f}, epoch elapsed time: {(end_ - start_):.2f}")
-                    # write this by default to get
+                    logger.info(f"Epoch: {i}, val_loss: {val_loss:.4f}, train_loss: {train_loss_mean:.4f}, epoch elapsed time: {(end_ - start_):.2f}")
 
                 if self.early_stopping:
                     if val_loss_best > val_loss:
@@ -207,6 +206,7 @@ def filter_loss_training(record):
 def filter_out_loss_training(record):
     return not record["message"].startswith("loss::")
 
+
 def set_up_logger(model_dir):
     for handler_id in logger._core.handlers:
         logger.remove(handler_id)
@@ -214,6 +214,13 @@ def set_up_logger(model_dir):
                filter=filter_out_loss_training, colorize=True)
     logger.add(f"{model_dir}/file.log", format="{message}", level="INFO", filter=filter_out_loss_training)
     logger.add(f"{model_dir}/train.log", format="{message}", level="INFO", filter=filter_loss_training)
+
+
+def set_up_logger_optuna(optuna_dir):
+    for handler_id in logger._core.handlers:
+        logger.remove(handler_id)
+    logger.add(f"{optuna_dir}/file.log", format="{message}", level="INFO", filter=filter_out_loss_training)
+
 
 if __name__ == "__main__":
 
@@ -304,6 +311,11 @@ if __name__ == "__main__":
         optuna_dir = results_dir / "optuna"
         os.makedirs(optuna_dir, exist_ok=True)
 
+        save_study = optuna_dir / (dataset_name + f"+{date.today()}")
+        os.makedirs(save_study, exist_ok=True)
+
+        set_up_logger_optuna(save_study)
+
         model_params_definition = {
             "num_classes": num_class,
             "in_dim": size,
@@ -330,4 +342,4 @@ if __name__ == "__main__":
         }
 
         optuna_optimization(ImageClassificationModel, ImageClassificationTraining, X, y,
-                            model_params_definition, training_params_definition)
+                            model_params_definition, training_params_definition, save_study, dataset_name)

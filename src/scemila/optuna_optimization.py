@@ -1,6 +1,8 @@
+import os
 from functools import partial
-
+import loguru as logger
 import optuna
+from datetime import date
 
 
 def objective(trial, model_params, training_params, x, y, model, training):
@@ -38,6 +40,7 @@ def objective(trial, model_params, training_params, x, y, model, training):
             params_model[param_name] = description
 
     print(params_selection_str)
+    logger.info(params_selection_str)
 
     # Create Instances
     model_instance = model(**model_params)
@@ -47,10 +50,13 @@ def objective(trial, model_params, training_params, x, y, model, training):
     return training_instance.train_(x, y)
 
 
-def optuna_optimization(model, training, X, y, model_params, training_params):
+def optuna_optimization(model, training, X, y, model_params, training_params, save_dir, dataset_name):
 
     # Create a study object and specify the optimization direction as 'minimize'.
-    study = optuna.create_study(study_name="test_optimization", direction="minimize")
+    study = optuna.create_study(study_name=dataset_name, direction="minimize",
+                                storage=f"sqlite:///{save_dir}/trial.db")
+
+    logger.info(f"Starting study with: {dataset_name} - stored in {save_dir}/trial.db")
 
     # Start the optimization; the number of trials can be adjusted
     objective_with_params = partial(objective, model_params=model_params, training_params=training_params,
