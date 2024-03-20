@@ -51,7 +51,7 @@ class ImageClassificationTraining(nn.Module):
         # Optimizer
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=weight_decay)
 
-    def train_(self, X: torch.Tensor, y: torch.Tensor):
+    def train_(self, X: torch.Tensor, y: torch.Tensor, progress: bool = False):
         y = self._check_tensor(y).squeeze().long()
 
         dataset = TrainingImageDataset(
@@ -83,9 +83,11 @@ class ImageClassificationTraining(nn.Module):
         for i in range(self.n_iter):
             train_loss = []
             start_ = time.time()
-            progress_bar = tqdm(total=np.ceil(len(train_indices) / self.batch_size), desc="Processing Batch")
+            if progress:
+                progress_bar = tqdm(total=np.ceil(len(train_indices) / self.batch_size), desc="Processing Batch")
             for batch_ndx, sample in enumerate(train_loader):
-                progress_bar.update(1)
+                if progress:
+                    progress_bar.update(1)
 
                 self.optimizer.zero_grad()
 
