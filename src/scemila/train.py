@@ -109,8 +109,8 @@ class ImageClassificationTraining(nn.Module):
                 self.optimizer.step()
 
                 train_loss.append(batch_loss.detach())
-
-            progress_bar.close()
+            if progress:
+                progress_bar.close()
             train_loss = torch.Tensor(train_loss).to(DEVICE)
 
             if self.early_stopping or i % self.n_iter_print == 0 or i == self.n_iter - 1:
