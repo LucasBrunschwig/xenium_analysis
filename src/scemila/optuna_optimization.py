@@ -1,3 +1,4 @@
+import json
 import os
 from functools import partial
 from loguru import logger
@@ -51,6 +52,11 @@ def objective(trial, model_params, training_params, x, y, model, training):
 
 
 def optuna_optimization(model, training, X, y, model_params, training_params, save_dir, dataset_name):
+
+    with open(save_dir / "model_params.json", "w") as file:
+        json.dump(model_params, file)
+    with open(save_dir / "training_params.json", "w") as file:
+        json.dump(training_params, file)
 
     # Create a study object and specify the optimization direction as 'minimize'.
     study = optuna.create_study(study_name=dataset_name, direction="minimize",
