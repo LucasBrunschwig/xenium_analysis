@@ -21,6 +21,7 @@ from src.scemila.custom_dataset import TrainingImageDataset, TestImageDataset
 from src.scemila.model import ImageClassificationModel
 from sklearn.model_selection import StratifiedShuffleSplit
 
+
 class ImageClassificationTraining(nn.Module):
     def __init__(self, model, batch_size, lr, n_iter, n_iter_min, early_stopping, n_iter_print, patience,
                  preprocess, transforms, clipping_value, weight_decay, results_dir):
@@ -77,13 +78,14 @@ class ImageClassificationTraining(nn.Module):
         self.model.train()
 
         loss = nn.CrossEntropyLoss()
-
+        val_loss = np.inf
         for i in range(self.n_iter):
             train_loss = []
             start_ = time.time()
             progress_bar = tqdm(total=np.ceil(len(train_indices) / self.batch_size), desc="Processing Batch")
             for batch_ndx, sample in enumerate(train_loader):
                 progress_bar.update(1)
+
                 self.optimizer.zero_grad()
 
                 X_next, y_next = sample
@@ -96,13 +98,13 @@ class ImageClassificationTraining(nn.Module):
 
                 batch_loss.backward()
 
-                self.optimizer.step()
-
-                train_loss.append(batch_loss.detach())
-
                 torch.nn.utils.clip_grad_norm_(
                     self.model.parameters(), self.clipping_value
                 )
+
+                self.optimizer.step()
+
+                train_loss.append(batch_loss.detach())
 
             progress_bar.close()
             train_loss = torch.Tensor(train_loss).to(DEVICE)
@@ -145,7 +147,7 @@ class ImageClassificationTraining(nn.Module):
                         )
                         break
 
-        return self
+        return val_loss
 
     def test(self, X):
         self.model.to(DEVICE)
@@ -187,6 +189,7 @@ def parse_arguments():
     parser.add_argument("--dataset", type=str, default=None, help="pickle file")
     parser.add_argument("--gpu", type=int, default=0, help="gpu number")
     parser.add_argument("--patience", type=int, default=10, help="patience number")
+    parser.add_argument("--optuna", type=bool, default=False, help="whether use optuna to optimize the model")
 
     return parser.parse_args()
 
@@ -204,6 +207,13 @@ def filter_loss_training(record):
 def filter_out_loss_training(record):
     return not record["message"].startswith("loss::")
 
+def set_up_logger(model_dir):
+    for handler_id in logger._core.handlers:
+        logger.remove(handler_id)
+    logger.add(sys.stdout, format="{time:YYYY:MM:DD:HH:mm} | {level} | {message}", level="INFO",
+               filter=filter_out_loss_training, colorize=True)
+    logger.add(f"{model_dir}/file.log", format="{message}", level="INFO", filter=filter_out_loss_training)
+    logger.add(f"{model_dir}/train.log", format="{message}", level="INFO", filter=filter_loss_training)
 
 if __name__ == "__main__":
 
@@ -216,25 +226,9 @@ if __name__ == "__main__":
     dataset_name = str(args.dataset)
     gpu_number = int(args.gpu)
     patience = int(args.patience)
-
-    training_params = {"lr": lr, "n_iter": n_iter, "size": size, "model_type": model_type}
-    model_name = f"model_{lr}_{n_iter}_{size}_{model_type}+{dataset_name}"
+    optuna = bool(args.optuna)
 
     results_dir = build_dir()
-    model_dir = results_dir / model_name
-    os.makedirs(model_dir, exist_ok=True)
-
-    for handler_id in logger._core.handlers:
-        logger.remove(handler_id)
-    logger.add(sys.stdout, format="{time:YYYY:MM:DD:HH:mm} | {level} | {message}", level="INFO", filter=filter_out_loss_training, colorize=True)
-    logger.add(f"{model_dir}/file.log", format="{message}", level="INFO", filter=filter_out_loss_training)
-    logger.add(f"{model_dir}/train.log", format="{message}", level="INFO", filter=filter_loss_training)
-
-    logger.info(f"Starting training and saving info to: {model_name}")
-
-    # saving model params
-    with open(model_dir / "training_params.json", "w") as file:
-        json.dump(training_params, file)
 
     # Load DataSet
     dataset_path = get_results_path() / "scemila" / "datasets" / dataset_name
@@ -243,15 +237,6 @@ if __name__ == "__main__":
 
     num_class = len(np.unique(y))
     y = torch.Tensor(y)
-
-    global DEVICE
-    DEVICE = torch.device(f"cuda:{gpu_number}")
-
-    attention_layer = True
-    model = ImageClassificationModel(num_classes=num_class, in_dim=size, model_type=model_type, attention_layer=attention_layer)
-    model_params = {"num_classes": num_class, "in_dim": size, "model_type": model_type, "attention_layer": attention_layer}
-    with open(model_dir / "model_params.json", "w") as file:
-        json.dump(model_params, file)
 
     preprocess = transforms.Compose([
         transforms.ToTensor(),
@@ -266,22 +251,83 @@ if __name__ == "__main__":
         transforms.RandomHorizontalFlip(0.3)
     ])
 
-    training = ImageClassificationTraining(model,
-                                           batch_size=256,
-                                           lr=lr,
-                                           n_iter=n_iter,
-                                           n_iter_min=10,
-                                           early_stopping=True,
-                                           n_iter_print=1,
-                                           patience=patience,
-                                           preprocess=preprocess,
-                                           transforms=transforms,
-                                           clipping_value=1.0,
-                                           weight_decay=1e-4,
-                                           results_dir=model_dir
-                                           )
+    global DEVICE
+    DEVICE = check_gpu(gpu_number)
 
-    training.train_(X, y)
+    if not optuna:
 
-    logger.info("Saving Model: to model_parameters.pth")
-    model.save(model_dir)
+        training_params = {"lr": lr, "n_iter": n_iter, "size": size, "model_type": model_type}
+        model_name = f"model_{lr}_{n_iter}_{size}_{model_type}+{dataset_name}"
+
+        model_dir = results_dir / model_name
+        os.makedirs(model_dir, exist_ok=True)
+
+        set_up_logger(model_dir)
+
+        logger.info(f"Starting training and saving info to: {model_name}")
+
+        # saving model params
+        with open(model_dir / "training_params.json", "w") as file:
+            json.dump(training_params, file)
+
+        attention_layer = True
+        model = ImageClassificationModel(num_classes=num_class, in_dim=size, model_type=model_type,
+                                         attention_layer=attention_layer, unfrozen_layers=2)
+
+        model_params = {"num_classes": num_class, "in_dim": size, "model_type": model_type,
+                        "attention_layer": attention_layer}
+        with open(model_dir / "model_params.json", "w") as file:
+            json.dump(model_params, file)
+
+        training = ImageClassificationTraining(model,
+                                               batch_size=256,
+                                               lr=lr,
+                                               n_iter=n_iter,
+                                               n_iter_min=10,
+                                               early_stopping=True,
+                                               n_iter_print=1,
+                                               patience=patience,
+                                               preprocess=preprocess,
+                                               transforms=transforms,
+                                               clipping_value=1.0,
+                                               weight_decay=1e-4,
+                                               results_dir=model_dir
+                                               )
+
+        training.train_(X, y)
+
+        logger.info("Saving Model: to model_parameters.pth")
+        model.save(model_dir)
+    else:
+        from src.scemila.optuna_optimization import optuna_optimization
+
+        optuna_dir = results_dir / "optuna"
+        os.makedirs(optuna_dir, exist_ok=True)
+
+        model_params_definition = {
+            "num_classes": num_class,
+            "in_dim": size,
+            "model_type": model_type,
+            "attention_layer": True,
+            "unfrozen_layers": [[1, 2, 3, 4], "categorical"],
+        }
+
+        training_params_definition = {
+                # Fixed Arguments
+                "preprocess": [preprocess],
+                "transforms": [transforms],
+                "early_stopping": [True],
+                "results_dir": [optuna_dir],
+                "n_iter_min": [10],
+                "n_iter_print": [10],
+                "n_iter": [200],
+                # Optimization Parameters
+                "batch_size": [[128, 256, 512], "categorical"],
+                "patience": [[3, 5, 10], "categorical"],
+                "lr": [[1e-4, 1e-5, 1e-6, 1e-7], "categorical"],
+                "clipping_value": [[0.1, 1.0, 10.0], "categorical"],
+                "weight_decay": [[1e-3, 1e-4, 1e-5], "categorical"],
+        }
+
+        optuna_optimization(ImageClassificationModel, ImageClassificationTraining, X, y,
+                            model_params_definition, training_params_definition)

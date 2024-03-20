@@ -430,11 +430,14 @@ def image_patch(img_array_, type_: str, square_size_: int = 400, orig_: tuple = 
                 ([0, l_t, r_t], [img_array_.shape[0], l_b, r_b])]
 
 
-def check_gpu():
+def check_gpu(gpu_number=None):
     device = None
     if torch.cuda.is_available():
         print("GPU available", torch.cuda.current_device())
-        device = torch.device("cuda")
+        if gpu_number:
+            device = torch.device(f"cuda:{gpu_number}")
+        else:
+            device = torch.device("cuda")
     elif torch.backends.mps.is_available():
         device = torch.device("mps")
         print("MPS Device Found")

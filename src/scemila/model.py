@@ -10,7 +10,7 @@ from src.utils import check_gpu
 
 
 class ImageClassificationModel(nn.Module):
-    def __init__(self, num_classes, model_type, in_dim, attention_layer):
+    def __init__(self, num_classes, model_type, in_dim, attention_layer, unfrozen_layers):
         super(ImageClassificationModel, self).__init__()
 
         if model_type == "cnn":
@@ -19,7 +19,7 @@ class ImageClassificationModel(nn.Module):
             resnet_model = "resnet50"
             self.model = ResNetAttention(num_classes, in_dim, resnet_model, attention_layer)
         elif "vit" in model_type:
-            self.model = VisionTransformer(num_classes, model_type)
+            self.model = VisionTransformer(num_classes, model_type, unfrozen_layers)
         else:
             raise ValueError("Not a model type choose in [cnn, resnet, vit]")
 
@@ -59,22 +59,29 @@ class SelfAttention(nn.Module):
 
 
 class VisionTransformer(nn.Module):
-    def __init__(self, num_classes, model_type):
+    def __init__(self, num_classes, model_type, unfrozen_layers):
         super(VisionTransformer, self).__init__()
 
         assert model_type in ["vit_16", "vit_32"]
 
         self.model_type = model_type
+        self.n_unfrozen_layers = unfrozen_layers
+
         if model_type == "vit_16":
             self.backbone = models.vit_b_16(weights="DEFAULT")
             # Freeze the network
             for parameters in self.backbone.parameters():
                 parameters.requires_grad = False
+
             for params in self.backbone.encoder.ln.parameters():
                 params.requires_grad = True
-            for params in self.backbone.encoder.layers.encoder_layer_11.parameters():
-                params.requires_grad = True
-            # Unfreeze layer 9
+
+            encoder_layers = [f"encoder_layer_{i}" for i in range(11, -1, -1)]
+            layers_to_unfreeze = encoder_layers[0:self.n_unfrozen_layers]
+            for layer in layers_to_unfreeze:
+                for params in getattr(self.backbone.encoder.layers, layer).parameters():
+                    params.requires_grad = True
+
         else:
             self.backbone = models.vit_b_32(weights="DEFAULT")
 

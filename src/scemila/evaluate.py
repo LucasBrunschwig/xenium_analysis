@@ -84,6 +84,7 @@ def plot_loss(data_dir_, save_dir):
     plt.ylabel("loss")
     plt.tight_layout()
     plt.savefig(results_dir / "loss.png")
+    plt.close()
 
 
 def plot_clustering(activations_, ground_truth_, save_dir_):
@@ -133,7 +134,7 @@ def explainability(model_, x_test_, highest_prob, preprocess, save_dir_):
         attributions_ig_np = attributions_ig_np.transpose(1, 2, 0)
 
         # Visualize
-        fig = viz.visualize_image_attr_multiple(attributions_ig_np,
+        fig, _ = viz.visualize_image_attr_multiple(attributions_ig_np,
                                           x_test_[idx],
                                           methods=["original_image", "heat_map"],
                                           signs=["all", "positive"],
@@ -142,14 +143,14 @@ def explainability(model_, x_test_, highest_prob, preprocess, save_dir_):
                                           use_pyplot=False)
 
         ig_dir = save_dir_ / "integrated_gradients"
-        os.makedirs(ig_dir)
+        os.makedirs(ig_dir, exist_ok=True)
         fig.savefig(ig_dir / f"ig_{label}.png")
 
     raise NotImplementedError()
 
 
 def build_dir(training):
-    dir_ = Path("nucleus_classification") / training
+    dir_ = get_results_path() / "nucleus_classification" / training[:-4]
     os.makedirs(dir_, exist_ok=True)
     return dir_
 
@@ -164,7 +165,7 @@ if __name__ == "__main__":
 
     training_name = "model_0.0001_100_224_vit_32+stardist_qupath_patch-HE_iou-0.5-1.0_pca-100_neigh_30_train.pkl"
     dataset_name = "stardist_qupath_patch-HE_iou-0.5-1.0_pca-100_neigh_30_test.pkl"
-    sample = False
+    sample = True
 
     # ---------------------------------------------------------------------- #
     # Load Predefined Information
@@ -193,8 +194,8 @@ if __name__ == "__main__":
     y_test = np.array(y_test)
 
     if sample:
-        x_test = x_test[0:1000]
-        y_test = y_test[0:1000]
+        x_test = x_test[0:3000]
+        y_test = y_test[0:3000]
 
     # Build preprocess with same value as pretrained params
     preprocess = transforms.Compose([
@@ -217,6 +218,8 @@ if __name__ == "__main__":
 
     predictions = []
     activations = []
+    [os.makedirs(results_dir / f"{label}", exist_ok=True) for label in np.unique(y_test)]
+
     highest_prob = {i: [0., 0] for i in np.unique(y_test)}
     for i, (x, y) in enumerate(zip(x_test, y_test)):
         logits = torch.nn.Softmax(dim=1)(model(preprocess(x).unsqueeze(0)).detach())
@@ -224,14 +227,19 @@ if __name__ == "__main__":
             if highest_prob[y][0] < logits[0, y]:
                 highest_prob[y][0] = float(logits[0, y])
                 highest_prob[y][1] = i
+            if logits[0, y] > 0.9:
+                plt.imshow(x)
+                plt.savefig(results_dir / f"{y}" / f"example_{i}.png")
+                plt.close()
+
         predictions.append(logits.argmax(dim=1).numpy())
         activations.append(activation.view(-1).numpy())
 
     predictions = np.array(predictions)
     activations = np.array(activations)
 
-    plot_clustering(activations, y_test, results_dir)
+    #plot_clustering(activations, y_test, results_dir)
 
-    plot_confusion_matrix(predictions, y_test, results_dir)
+    #plot_confusion_matrix(predictions, y_test, results_dir)
 
-    explainability(model, x_test, highest_prob, preprocess, results_dir)
+    #explainability(model, x_test, highest_prob, preprocess, results_dir)
