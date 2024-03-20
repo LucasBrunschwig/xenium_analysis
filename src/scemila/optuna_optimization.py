@@ -1,6 +1,6 @@
 import os
 from functools import partial
-import loguru as logger
+from loguru import logger
 import optuna
 from datetime import date
 
