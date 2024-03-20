@@ -226,6 +226,17 @@ def set_up_logger_optuna(optuna_dir):
     logger.add(f"{optuna_dir}/file.log", format="{message}", level="INFO", filter=filter_out_loss_training)
 
 
+def clear_directory(directory_path):
+    try:
+        files = os.listdir(directory_path)
+        for file in files:
+            file_path = os.path.join(directory_path, file)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+    except OSError:
+        print("Error occurred while deleting files.")
+
+
 if __name__ == "__main__":
 
     # Parse arguments
@@ -318,6 +329,7 @@ if __name__ == "__main__":
         study_name = f"{model_type}+{dataset_name}+{date.today()}"
         save_study = optuna_dir / study_name
         os.makedirs(save_study, exist_ok=True)
+        clear_directory(save_study)
 
         set_up_logger_optuna(save_study)
 
