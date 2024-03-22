@@ -779,68 +779,63 @@ def test_transcripts_iou_threshold(masks_he_, masks_dapi_, transcripts_, backgro
             plt.close()
 
         # Assess purity marker (positive / negative) inspired from bidcell
-        df_major_clusters = pd.read_csv("/Users/lbrunsch/Desktop/sc_breast.csv")
-        df_major_clusters = df_major_clusters[df_major_clusters.atlas == "EMTAB8107"]
-        df_major_clusters.index = df_major_clusters.cell_type
-        df_major_clusters = df_major_clusters.drop(["ct_idx", "cell_type", "atlas", "Unnamed: 0"], axis=1)
-        for i in range(len(df_major_clusters)):
-            df_major_clusters.iloc[i] = df_major_clusters.iloc[i] / df_major_clusters.iloc[i].sum()
-
-        # Compute closest cluster by doing scalar product
-        closeness_dict_iou = {i: [] for i in range(len(df_major_clusters))}
-        for row in range(len(adata_match_iou)):
-            vect_gene = adata_match_iou.X[row, :]
-            if vect_gene.sum() > 0:
-                norm_vect = vect_gene / np.sum(vect_gene)
-                closeness = np.array([np.dot(df_major_clusters.iloc[j], norm_vect) for j in range(len(df_major_clusters))])
-                closest_cluster = int(closeness.argmax())
-                closeness_dict_iou[closest_cluster].append(closeness)
-
-        closeness_dict_dapi = {i: [] for i in range(len(df_major_clusters))}
-        for row in range(len(adata_dapi)):
-            vect_gene = adata_dapi.X[row, :]
-            if vect_gene.sum() > 0:
-                norm_vect = vect_gene / np.sum(vect_gene)
-                closeness = np.array([np.dot(df_major_clusters.iloc[j], norm_vect) for j in range(len(df_major_clusters))])
-                closest_cluster = int(closeness.argmax())
-                closeness_dict_dapi[closest_cluster].append(closeness)
-
-        closeness_dict_dapi_unmatched = {i: [] for i in range(len(df_major_clusters))}
-        for row in range(len(adata_match_iou_dapi_un)):
-            vect_gene = adata_match_iou_dapi_un.X[row, :]
-            if vect_gene.sum() > 0:
-                norm_vect = vect_gene / np.sum(vect_gene)
-                closeness = np.array([np.dot(df_major_clusters.iloc[j], norm_vect) for j in range(len(df_major_clusters))])
-                closest_cluster = int(closeness.argmax())
-                closeness_dict_dapi_unmatched[closest_cluster].append(closeness)
-
-        for i in range(len(closeness_dict_iou.keys())):
-            fig, axs = plt.subplots(ncols=3, nrows=1, figsize=(20, 5))
-            categories = df_major_clusters.index.tolist()
-
-            data_df = pd.DataFrame(closeness_dict_iou[i], columns=categories)
-            data_melted = data_df.melt(var_name='Category', value_name='Value')
-            sns.boxplot(x='Category', y='Value', data=data_melted, ax=axs[0])
-
-            data_df = pd.DataFrame(closeness_dict_dapi[i], columns=categories)
-            data_melted = data_df.melt(var_name='Category', value_name='Value')
-            sns.boxplot(x='Category', y='Value', data=data_melted, ax=axs[1])
-
-            data_df = pd.DataFrame(closeness_dict_dapi_unmatched[i], columns=categories)
-            data_melted = data_df.melt(var_name='Category', value_name='Value')
-            sns.boxplot(x='Category', y='Value', data=data_melted, ax=axs[2])
-            [ax.tick_params(axis="x", rotation=45) for ax in axs]
-            plt.tight_layout()
-            plt.savefig(plots_dir_ / f"cluster_matching_comparison_{i}.png")
-            plt.close()
-
-
-
-
-
+        # df_major_clusters = pd.read_csv("/Users/lbrunsch/Desktop/sc_breast.csv")
+        # df_major_clusters = df_major_clusters[df_major_clusters.atlas == "EMTAB8107"]
+        # df_major_clusters.index = df_major_clusters.cell_type
+        # df_major_clusters = df_major_clusters.drop(["ct_idx", "cell_type", "atlas", "Unnamed: 0"], axis=1)
+        # for i in range(len(df_major_clusters)):
+        #     df_major_clusters.iloc[i] = df_major_clusters.iloc[i] / df_major_clusters.iloc[i].sum()
         #
+        # # Compute closest cluster by doing scalar product
+        # closeness_dict_iou = {i: [] for i in range(len(df_major_clusters))}
+        # for row in range(len(adata_match_iou)):
+        #     vect_gene = adata_match_iou.X[row, :]
+        #     if vect_gene.sum() > 0:
+        #         norm_vect = vect_gene / np.sum(vect_gene)
+        #         closeness = np.array([np.dot(df_major_clusters.iloc[j], norm_vect) for j in range(len(df_major_clusters))])
+        #         closest_cluster = int(closeness.argmax())
+        #         closeness_dict_iou[closest_cluster].append(closeness)
+        #
+        # closeness_dict_dapi = {i: [] for i in range(len(df_major_clusters))}
+        # for row in range(len(adata_dapi)):
+        #     vect_gene = adata_dapi.X[row, :]
+        #     if vect_gene.sum() > 0:
+        #         norm_vect = vect_gene / np.sum(vect_gene)
+        #         closeness = np.array([np.dot(df_major_clusters.iloc[j], norm_vect) for j in range(len(df_major_clusters))])
+        #         closest_cluster = int(closeness.argmax())
+        #         closeness_dict_dapi[closest_cluster].append(closeness)
+        #
+        # closeness_dict_dapi_unmatched = {i: [] for i in range(len(df_major_clusters))}
+        # for row in range(len(adata_match_iou_dapi_un)):
+        #     vect_gene = adata_match_iou_dapi_un.X[row, :]
+        #     if vect_gene.sum() > 0:
+        #         norm_vect = vect_gene / np.sum(vect_gene)
+        #         closeness = np.array([np.dot(df_major_clusters.iloc[j], norm_vect) for j in range(len(df_major_clusters))])
+        #         closest_cluster = int(closeness.argmax())
+        #         closeness_dict_dapi_unmatched[closest_cluster].append(closeness)
+        #
+        # for i in range(len(closeness_dict_iou.keys())):
+        #     fig, axs = plt.subplots(ncols=3, nrows=1, figsize=(20, 5))
+        #     categories = df_major_clusters.index.tolist()
+        #
+        #     data_df = pd.DataFrame(closeness_dict_iou[i], columns=categories)
+        #     data_melted = data_df.melt(var_name='Category', value_name='Value')
+        #     sns.boxplot(x='Category', y='Value', data=data_melted, ax=axs[0])
+        #
+        #     data_df = pd.DataFrame(closeness_dict_dapi[i], columns=categories)
+        #     data_melted = data_df.melt(var_name='Category', value_name='Value')
+        #     sns.boxplot(x='Category', y='Value', data=data_melted, ax=axs[1])
+        #
+        #     data_df = pd.DataFrame(closeness_dict_dapi_unmatched[i], columns=categories)
+        #     data_melted = data_df.melt(var_name='Category', value_name='Value')
+        #     sns.boxplot(x='Category', y='Value', data=data_melted, ax=axs[2])
+        #     [ax.tick_params(axis="x", rotation=45) for ax in axs]
+        #     plt.tight_layout()
+        #     plt.savefig(plots_dir_ / f"cluster_matching_comparison_{i}.png")
+        #     plt.close()
 
         # check if there are genes that are RNA that are only expressed in other clusters
+
 
 def convert_geojson(ix, masks_df, save_path_):
     masks_ = masks_df.iloc[ix]

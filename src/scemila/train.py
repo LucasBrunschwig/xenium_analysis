@@ -3,6 +3,7 @@ import json
 import os
 from datetime import date
 from pathlib import Path
+from random import random
 
 from loguru import logger
 import torch
@@ -245,6 +246,18 @@ def clear_directory(directory_path):
     except OSError:
         print("Error occurred while deleting files.")
 
+def visualize_top_5(patches, labels, vizualisation_dir):
+    def get_random_indices(labels, n_sample):
+        label_indices = {}
+        for index, label in enumerate(labels):
+            if label in label_indices:
+                label_indices[label].append(index)
+            else:
+                label_indices[label] = [index]
+
+        random_indices = {label: random.sample(indices, n_sample) for label, indices in label_indices.items()}
+        return random_indices
+
 
 if __name__ == "__main__":
 
@@ -342,23 +355,29 @@ if __name__ == "__main__":
 
         set_up_logger_optuna(save_study)
 
+        optuna_study = {
+            "sample": 1000,
+            "metrics": "balanced_accuracy"
+        }
+
         model_params_definition = {
             "num_classes": num_class,
             "in_dim": size,
             "model_type": model_type,
             "attention_layer": True,
-            "unfrozen_layers": [[1, 2, 3, 4], "categorical"],
+            "unfrozen_layers": [[1, 2, 3, 4], "int"],
+            "n_classifier": [[1, 2, 3], "int"],
         }
 
         training_params_definition = {
                 # Fixed Arguments
-                "preprocess": [preprocess],
-                "transforms": [transforms],
-                "early_stopping": [True],
-                "results_dir": [optuna_dir],
-                "n_iter_min": [10],
-                "n_iter_print": [10],
-                "n_iter": [150],
+                "preprocess": preprocess,
+                "transforms": transforms,
+                "early_stopping": True,
+                "results_dir": optuna_dir,
+                "n_iter_min": 10,
+                "n_iter_print": 10,
+                "n_iter": 150,
                 # Optimization Parameters
                 "batch_size": [[128, 256, 512], "categorical"],
                 "patience": [[3, 5, 10], "categorical"],

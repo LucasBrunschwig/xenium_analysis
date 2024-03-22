@@ -1,59 +1,96 @@
-import json
-import os
 import pickle
 from functools import partial
+
+import numpy as np
 from loguru import logger
 import optuna
 import torch
+import random
+from sklearn.model_selection import StratifiedKFold
 
-from datetime import date
+from src.scemila.m
 
 best_val_loss = None
 
 
-def objective(trial, model_params, training_params, x, y, model, training, save_model):
+def get_random_indices(labels, n_sample):
 
-    # Instantiate Parameters
-    params_selection_str = f"Starting Trial {trial.number}: "
-    params_tr = {}
-    for param_name, description in training_params.items():
-        if len(description) > 1:
-            range_ = description[0]
-            distribution = description[1]
-            if distribution == "log_uniform":
-                params_tr[param_name] = trial.suggest_loguniform(param_name, range_[0], range_[1])
-            elif distribution == "uniform":
-                params_tr[param_name] = trial.suggest_uniform(param_name, range_[0], range_[1])
-            elif distribution == "categorical":
-                params_tr[param_name] = trial.suggest_categorical(param_name, range_)
-            params_selection_str += f"{param_name}-{params_tr[param_name]}, "
-
+    label_indices = {}
+    for index, label in enumerate(labels):
+        if label in label_indices:
+            label_indices[label].append(index)
         else:
-            params_tr[param_name] = description[0]
-    params_model = {}
-    for param_name, description in model_params.items():
+            label_indices[label] = [index]
+
+    random_indices = []
+    for label, indices in label_indices.items():
+        ix = random.sample(indices, min(n_sample, len(label)))
+        random_indices.extend(ix)
+
+    return np.array(random_indices)
+
+
+def build_params(params_collection, params_selection_str, trial):
+    params_selection = {}
+    for param_name, description in params_collection.items():
         if isinstance(description, list):
             range_ = description[0]
             distribution = description[1]
             if distribution == "log_uniform":
-                params_model[param_name] = trial.suggest_loguniform(param_name, range_[0], range_[1])
+                params_selection[param_name] = trial.suggest_loguniform(param_name, range_[0], range_[1])
             elif distribution == "uniform":
-                params_model[param_name] = trial.suggest_uniform(param_name, range_[0], range_[1])
+                params_selection[param_name] = trial.suggest_uniform(param_name, range_[0], range_[1])
             elif distribution == "categorical":
-                params_model[param_name] = trial.suggest_categorical(param_name, range_)
-            params_selection_str += f"{param_name}-{params_model[param_name]}, "
+                params_selection[param_name] = trial.suggest_categorical(param_name, range_)
+            params_selection_str += f"{param_name}-{params_selection[param_name]}, "
         else:
-            params_model[param_name] = description
+            params_selection[param_name] = description
 
+    return params_selection, params_selection_str
+
+
+def objective(trial, optuna_params, model_params, training_params, x, y, model, training, save_model):
+
+    # Instantiate Parameters
+    params_selection_str = f"Starting Trial {trial.number}: "
+    params_tr, params_selection_str = build_params(training_params, params_selection_str, trial)
+    params_mo, params_selection_str = build_params(model_params, params_selection_str, trial)
+
+    # Parameters selection log
     print(params_selection_str)
     logger.info(params_selection_str)
 
     # Create Instances
-    model_instance = model(**model_params)
+    model_instance = model(**params_mo)
     torch.compile(model_instance)
-
     params_tr["model"] = model_instance
     training_instance = training(**params_tr)
+
+    stratifier = StratifiedKFold(n_splits=5, random_state=3, shuffle=True)
+
+    sampling = optuna_params["sample"]
+    if sampling is not None:
+        ix = get_random_indices(y, sampling)
+        x = x[ix]
+        y = y[ix]
+
+    metric = ClassifierMetrics(optuna_params["metrics"])
+
+    metric_fold = []
+    for train_index, test_index in stratifier.split(x, y):
+        # get x_train, y_train
+        x_train = x[train_index]
+        y_train = y[train_index]
+        x_test = x[test_index]
+        y_test = y[test_index]
+
+        training_instance.train_(x_train, y_train)
+
+        preds = training_instance.predict(x_test)
+
+        metric_fold.append(metrics.evaluate(preds, y_test))
+
+
 
     # Train the model
     val_loss, train_loss = training_instance.train_(x, y)

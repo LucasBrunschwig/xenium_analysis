@@ -33,6 +33,12 @@ def compare_clusters(path: Path, genes_list: list, strategy, save_dir: Path):
         count_matrix = count_matrix[:, genes_intersection]
     count_matrix_norm = preprocess_matrix(count_matrix)
 
+    sc.pp.pca(count_matrix_norm, n_comps=500)
+    variance_explained = 0
+    for ratio in count_matrix_norm.uns["pca"]["variance_ratio"]:
+        variance_explained += ratio
+    print(variance_explained)
+
     clusters = ["major_cluster", "minor_cluster"]
     for cluster_type in clusters:
 
@@ -109,8 +115,10 @@ def compare_clusters(path: Path, genes_list: list, strategy, save_dir: Path):
 def get_nnls_score(aggregates, nmf):
     projections = []
 
-    aggregates_norm = (aggregates - np.mean(aggregates, axis=1, keepdims=True)) / np.std(aggregates, axis=1, keepdims=True)
-    nmf_norm = (nmf - np.mean(nmf, axis=1, keepdims=True)) / np.std(nmf, axis=1, keepdims=True)
+    #aggregates_norm = (aggregates - np.mean(aggregates, axis=1, keepdims=True)) / np.std(aggregates, axis=1, keepdims=True)
+    #nmf_norm = (nmf - np.mean(nmf, axis=1, keepdims=True)) / np.std(nmf, axis=1, keepdims=True)
+    aggregates_norm = aggregates
+    nmf_norm = nmf
 
     for nmf_ in nmf_norm:
         projection, _ = nnls(aggregates_norm.T, nmf_)
@@ -238,8 +246,8 @@ if __name__ == "__main__":
     atlas_path = get_data_path() / "Breast_Cancer_Atlas"
 
     if run_main:
-        atlas = prepare_atlas(atlas_path, method="mean", genes_list=genes_list_xenium)
+        atlas = prepare_atlas(atlas_path, method="mean", genes_list=None)
     else:
         strategies = [None, "keep_high_genes"]
         for strategy in strategies:
-            compare_clusters(atlas_path, genes_list_xenium, strategy, results_dir)
+            compare_clusters(atlas_path, None, strategy, results_dir)
