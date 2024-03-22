@@ -292,6 +292,15 @@ def save_dataset(patch, label, save_dir: Path, dataset_name_: str):
         pickle.dump(dataset, file)
 
 
+def extract_marker_genes(adata):
+    sc.tl.rank_genes_groups(adata, groupby="leiden", inplace=True)
+    marker_genes = []
+    for label in np.sort(adata.obs.leiden.unique().astype(int)):
+        label = str(label)
+        marker_genes.append(sc.get.rank_genes_groups_df(adata, group=label))
+    return marker_genes
+
+
 def build_dataset(dataset_name, masks_adata_, img_he_, n_comp_, n_neighbor_, train_fraction_, patch_size_,
                   density_filter: bool, save_path_: Path, visualize_: bool = False):
     """ """
@@ -304,6 +313,8 @@ def build_dataset(dataset_name, masks_adata_, img_he_, n_comp_, n_neighbor_, tra
     masks_adata_filtered = preprocess_transcriptomics(masks_adata_)
     masks_adata_labels = compute_ref_labels(masks_adata_filtered, n_comp=n_comp_, n_neighbors=n_neighbor_)
     print(np.unique(masks_adata_labels.obs.leiden.to_numpy()))
+
+    marker_genes = extract_marker_genes(masks_adata_labels)
 
     # Remove filtered cell's nucleus boundaries
     filtered_cell = set(cell_ids).difference(masks_adata_filtered.obs["cell_id"])
@@ -318,6 +329,7 @@ def build_dataset(dataset_name, masks_adata_, img_he_, n_comp_, n_neighbor_, tra
     labels = np.array([label for ix, label in enumerate(labels) if ix not in border_ix])
     polygons_filtered = [mask for i, mask in enumerate(polygons) if i not in border_ix]
     polygons_filtered = pd.DataFrame(polygons_filtered, columns=["polygon"])
+
     # Extract low density Cells
     if density_filter:
         density_list = extract_density(polygons_filtered, patches[0].shape)
