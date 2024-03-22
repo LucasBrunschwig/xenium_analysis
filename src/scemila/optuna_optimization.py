@@ -49,7 +49,9 @@ def objective(trial, model_params, training_params, x, y, model, training, save_
     logger.info(params_selection_str)
 
     # Create Instances
-    model_instance = torch.compile(model(**model_params))
+    model_instance = model(**model_params)
+    torch.compile(model_instance)
+
     params_tr["model"] = model_instance
     training_instance = training(**params_tr)
 
