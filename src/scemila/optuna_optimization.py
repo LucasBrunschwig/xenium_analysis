@@ -84,7 +84,7 @@ def optuna_optimization(model, training, X, y, model_params, training_params, sa
     # Start the optimization; the number of trials can be adjusted
     objective_with_params = partial(objective, model_params=model_params, training_params=training_params,
                                     x=X, y=y, model=model, training=training, save_model=save_dir)
-    study.optimize(objective_with_params, n_trials=2)
+    study.optimize(objective_with_params, n_trials=30)
 
     # Print the optimal parameters
     best_params = study.best_params
