@@ -25,7 +25,7 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 class ImageClassificationTraining(nn.Module):
     def __init__(self, model, batch_size, lr, n_iter, n_iter_min, early_stopping, n_iter_print, patience,
-                 preprocess, transforms, clipping_value, weight_decay, results_dir):
+                 preprocess, transforms, clipping_value, weight_decay, weighted_ce, results_dir):
         super(ImageClassificationTraining, self).__init__()
 
         # Model
@@ -40,7 +40,9 @@ class ImageClassificationTraining(nn.Module):
         self.patience = patience
         self.clipping_value = clipping_value
         self.early_stopping = early_stopping
+        self.weighted_ce = weighted_ce
         self.results_dir = results_dir
+
 
         # Create
 
@@ -78,7 +80,14 @@ class ImageClassificationTraining(nn.Module):
         patience = 0
         self.model.train()
 
-        loss = nn.CrossEntropyLoss()
+        if self.weighted_ce:
+            class_counts = torch.bincount(y.squeeze().long())
+            class_weights = 1. / class_counts.float()
+            class_weights = class_weights / class_weights.sum()
+            class_weights = class_weights.to(DEVICE)
+            loss = nn.CrossEntropyLoss(weight=class_weights)
+        else:
+            loss = nn.CrossEntropyLoss()
         val_loss = np.inf
         train_loss = np.inf
         for i in range(self.n_iter):
@@ -356,6 +365,7 @@ if __name__ == "__main__":
                 "lr": [[1e-4, 1e-5, 1e-6, 1e-7], "categorical"],
                 "clipping_value": [[0.1, 1.0, 10.0], "categorical"],
                 "weight_decay": [[1e-3, 1e-4, 1e-5], "categorical"],
+                "weighted_ce": [[True, False], "categorical"]
         }
 
         optuna_optimization(ImageClassificationModel, ImageClassificationTraining, X, y,
