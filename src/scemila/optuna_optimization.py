@@ -4,10 +4,14 @@ import pickle
 from functools import partial
 from loguru import logger
 import optuna
+import torch
+
 from datetime import date
 
+best_val_loss = None
 
-def objective(trial, model_params, training_params, x, y, model, training):
+
+def objective(trial, model_params, training_params, x, y, model, training, save_model):
 
     # Instantiate Parameters
     params_selection_str = f"Starting Trial {trial.number}: "
@@ -45,7 +49,7 @@ def objective(trial, model_params, training_params, x, y, model, training):
     logger.info(params_selection_str)
 
     # Create Instances
-    model_instance = model(**model_params)
+    model_instance = torch.compile(model(**model_params))
     params_tr["model"] = model_instance
     training_instance = training(**params_tr)
 
@@ -55,6 +59,9 @@ def objective(trial, model_params, training_params, x, y, model, training):
     # Store loss
     print(f"Model final loss: train-{train_loss}, val-{val_loss}")
     logger.info(f"model loss: {train_loss}:{val_loss}")
+
+    if best_val_loss is None or val_loss < best_val_loss:
+        model_instance.save(save_model)
 
     return val_loss
 
@@ -74,7 +81,7 @@ def optuna_optimization(model, training, X, y, model_params, training_params, sa
 
     # Start the optimization; the number of trials can be adjusted
     objective_with_params = partial(objective, model_params=model_params, training_params=training_params,
-                                    x=X, y=y, model=model, training=training)
+                                    x=X, y=y, model=model, training=training, save_model=save_dir)
     study.optimize(objective_with_params, n_trials=2)
 
     # Print the optimal parameters

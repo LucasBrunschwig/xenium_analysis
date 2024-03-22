@@ -21,6 +21,7 @@ from pathlib import Path
 import json
 import geojson
 import scanpy as sc
+import sklearn
 from geojson import FeatureCollection, Feature, Polygon
 import geopandas as gpd
 import numpy as np
@@ -598,6 +599,19 @@ def test_matching(masks_he_, masks_dapi_, dapi_img_, he_img_, results_dir_):
     plt.close()
 
     # ------------------------------------------------------------------------------------------------------------ #
+    # Test area differences
+    low_iou = [value for key, values in area_nucleus.items() for value in values if
+               key in ["<0_3", "0_3-0_4", "0_4-0_5"]]
+    high_iou = [value for key, values in area_nucleus.items() for value in values if
+                key not in ["<0_3", "0_3-0_4", "0_4-0_5"]]
+    high_iou = [value for key, values in area_nucleus.items() for value in values if
+                key not in ["<0_3", "0_3-0_4", "0_4-0_5"] and (key != ["0_4-0_5"] or value < 561) and (
+                            key != ["0_5-0-6"] or value < 776)]
+    all_iou = [value for key, values in area_nucleus.items() for value in values]
+    stat, p_value = stats.mannwhitneyu(high_iou, all_iou)
+    stat, p_value = stats.mannwhitneyu(low_iou, all_iou)
+
+    # ------------------------------------------------------------------------------------------------------------ #
     # Save GeoJson masks for QuPath Visualization
 
     geojson_dir = results_dir_ / "geojson"
@@ -606,6 +620,227 @@ def test_matching(masks_he_, masks_dapi_, dapi_img_, he_img_, results_dir_):
         filename = key + ".geojson"
         convert_geojson(values, masks_he_df, geojson_dir / filename)
 
+
+def test_transcripts_iou_threshold(masks_he_, masks_dapi_, transcripts_, background_, save_dir_):
+    """ This function test the transcripts assignment quality with different iou thresholds
+
+    :param masks_he_:
+    :param masks_dapi_:
+    :param transcripts_:
+    :return:
+    """
+
+    save_dir_ = save_dir_ / "transcripts_iou"
+    adata_dir_ = save_dir_ / "adata"
+    os.makedirs(save_dir_, exist_ok=True)
+    os.makedirs(adata_dir_, exist_ok=True)
+
+    iou_thresholds = [0.3, 0.4, 0.5, 0.7, 0.9]
+
+    # Running on H&E segmentation
+    print("Building H&E Object")
+    df_he_ = pd.DataFrame(data={"polygon": masks_he_, "cell_id": range(0, len(masks_he_))},
+                          columns=["polygon", "cell_id"])
+    adata_filename_he_ = f"Xenium_BreastCancer-1_qupath-stardist_he-{he_str}.h5ad"
+    adata_he = nucleus_transcripts_matrix_creation(masks_nucleus=df_he_,
+                                                   transcripts_df=transcripts,
+                                                   background_masks=background, results_dir_=results_dir,
+                                                   filename_=adata_filename_he_[:-5], sample_=False)
+    # Running on DAPI segmentation
+    print("Building DAPI Object")
+    df_dapi_ = pd.DataFrame(data={"polygon": masks_dapi[dapi_str], "cell_id": range(0, len(masks_dapi[dapi_str]))},
+                            columns=["polygon", "cell_id"])
+    adata_filename_dapi_ = f"Xenium_BreastCancer-1_qupath-stardist_dapi-{dapi_str}.h5ad"
+    adata_dapi = nucleus_transcripts_matrix_creation(masks_nucleus=df_dapi_,
+                                                     transcripts_df=transcripts,
+                                                     background_masks=background, results_dir_=results_dir,
+                                                     filename_=adata_filename_dapi_[:-5], sample_=False)
+
+    for iou_ in iou_thresholds:
+        plots_dir_ = save_dir_ / f"iou_{iou_}" / "plots"
+        os.makedirs(plots_dir_, exist_ok=True)
+
+        # Build adata objects based on threshold (matched HE/DAPI, unmatched HE, unmatched DAPI)
+        df_match_iou, df_unmatched_he, matched_dapi = extract_matching_mask(masks_he_, masks_dapi_, iou_, full=True)
+        set_unmatched_dapi = set(range(0, len(df_dapi_))).difference(matched_dapi)
+        df_unmatched_dapi = df_dapi_.iloc[list(set_unmatched_dapi)]
+        df_match_iou["polygon"] = df_match_iou.dapi
+        df_unmatched_he["polygon"] = df_unmatched_he.he
+
+        #
+        adata_filename_iou = f"Xenium_BreastCancer-1_iou_{iou_}.h5ad"
+        adata_filename_iou_dapi_unmatched = f"Xenium_BreastCancer-1_iou_{iou_}_dapi-unmatched.h5ad"
+        adata_filename_iou_he_unmatched = f"Xenium_BreastCancer-1_iou_{iou_}_he-unmatched.h5ad"
+
+        adata_match_iou = nucleus_transcripts_matrix_creation(masks_nucleus=df_match_iou[["polygon", "cell_id"]],
+                                                              transcripts_df=transcripts,
+                                                              background_masks=background_,
+                                                              results_dir_=adata_dir_,
+                                                              filename_=adata_filename_iou,
+                                                              sample_=False)
+        adata_match_iou_he_un = nucleus_transcripts_matrix_creation(masks_nucleus=df_unmatched_he[["polygon", "cell_id"]],
+                                                                    transcripts_df=transcripts,
+                                                                    background_masks=background_,
+                                                                    results_dir_=adata_dir_,
+                                                                    filename_=adata_filename_iou_he_unmatched,
+                                                                    sample_=False)
+        adata_match_iou_dapi_un = nucleus_transcripts_matrix_creation(masks_nucleus=df_unmatched_dapi[["polygon", "cell_id"]],
+                                                                      transcripts_df=transcripts,
+                                                                      background_masks=background_,
+                                                                      results_dir_=adata_dir_,
+                                                                      filename_=adata_filename_iou_dapi_unmatched,
+                                                                      sample_=False)
+
+        # Assess the number of transcripts with the nucleus area (expect to be proportional)
+        # Data preparation for linear regression
+        datasets_dapi = [adata_dapi.obs, adata_match_iou.obs, adata_match_iou_dapi_un.obs]
+        datasets_he = [adata_he.obs, adata_match_iou.obs, adata_match_iou_he_un.obs]
+        datasets_col = [datasets_dapi, datasets_he]
+        names = ["dapi", "he"]
+        for datasets, name in zip(datasets_col, names):
+            fig, axs = plt.subplots(ncols=3, nrows=1, figsize=(20, 4))
+
+            # Iterate over datasets to perform linear regression and plot
+            for ax, data in zip(axs, datasets):
+                # Extracting the variables for linear regression
+                X = data.nucleus_area.values.reshape(-1, 1)
+                y = data.transcripts_count.values
+
+                # Linear regression
+                model = sklearn.linear_model.LinearRegression().fit(X, y)
+                y_pred = model.predict(X)
+
+                # Plot scatter and regression line
+                ax.scatter(X, y, s=2, alpha=.5)
+                ax.plot(X, y_pred, color='red', linewidth=0.5
+                        )  # Plot the regression line
+
+                # Compute and display the R^2 value
+                # Equation of the line
+                r2 = model.score(X, y)
+                m = model.coef_[0]
+                c = model.intercept_
+                equation = f'y = {m:.2f}x + {c:.2f}'
+
+                # Display the equation and R^2 value with a white background and black edge
+                text_str = f'{equation}\n$R^2$: {r2:.2f}'
+                ax.text(0.95, 0.95, text_str, transform=ax.transAxes, fontsize=8,
+                        verticalalignment='top', horizontalalignment='right',
+                        bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
+
+                # Set common settings
+                ax.grid()
+                ax.set_ylim(0, 1500)
+                ax.set_xlim(0, 60)
+
+            plt.savefig(plots_dir_ / f"compare_{name}_number_transcripts.png")
+            plt.close()
+
+        datasets_dapi = [adata_dapi, adata_match_iou, adata_match_iou_dapi_un]
+        datasets_he = [adata_he, adata_match_iou, adata_match_iou_he_un]
+        datasets_col = [datasets_dapi, datasets_he]
+        for datasets, name in zip(datasets_col, names):
+            fig, axs = plt.subplots(ncols=3, nrows=1, figsize=(20, 4))
+
+            # Iterate over datasets to perform linear regression and plot
+            for ax, data in zip(axs, datasets):
+                # Extracting the variables for linear regression
+                X = data.obs.nucleus_area.values.reshape(-1, 1) * (0.2125 ** 2)
+                y = np.count_nonzero(data.X, axis=1)
+
+                # Linear regression
+                model = sklearn.linear_model.LinearRegression().fit(X, y)
+                y_pred = model.predict(X)
+
+                # Plot scatter and regression line
+                ax.scatter(X, y, s=2, alpha=.5)
+                ax.plot(X, y_pred, color='red', linewidth=0.5
+                        )  # Plot the regression line
+
+                # Compute and display the R^2 value
+                # Equation of the line
+                r2 = model.score(X, y)
+                m = model.coef_[0]
+                c = model.intercept_
+                equation = f'y = {m:.2f}x + {c:.2f}'
+
+                # Display the equation and R^2 value with a white background and black edge
+                text_str = f'{equation}\n$R^2$: {r2:.2f}'
+                ax.text(0.95, 0.95, text_str, transform=ax.transAxes, fontsize=8,
+                        verticalalignment='top', horizontalalignment='right',
+                        bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
+
+                # Set common settings
+                ax.grid()
+                ax.set_ylim(0, 180)
+                ax.set_xlim(0, 60)
+
+            plt.savefig(plots_dir_ / f"compare_{name}_number_unique_transcripts.png")
+            plt.close()
+
+        # Assess purity marker (positive / negative) inspired from bidcell
+        df_major_clusters = pd.read_csv("/Users/lbrunsch/Desktop/sc_breast.csv")
+        df_major_clusters = df_major_clusters[df_major_clusters.atlas == "EMTAB8107"]
+        df_major_clusters.index = df_major_clusters.cell_type
+        df_major_clusters = df_major_clusters.drop(["ct_idx", "cell_type", "atlas", "Unnamed: 0"], axis=1)
+        for i in range(len(df_major_clusters)):
+            df_major_clusters.iloc[i] = df_major_clusters.iloc[i] / df_major_clusters.iloc[i].sum()
+
+        # Compute closest cluster by doing scalar product
+        closeness_dict_iou = {i: [] for i in range(len(df_major_clusters))}
+        for row in range(len(adata_match_iou)):
+            vect_gene = adata_match_iou.X[row, :]
+            if vect_gene.sum() > 0:
+                norm_vect = vect_gene / np.sum(vect_gene)
+                closeness = np.array([np.dot(df_major_clusters.iloc[j], norm_vect) for j in range(len(df_major_clusters))])
+                closest_cluster = int(closeness.argmax())
+                closeness_dict_iou[closest_cluster].append(closeness)
+
+        closeness_dict_dapi = {i: [] for i in range(len(df_major_clusters))}
+        for row in range(len(adata_dapi)):
+            vect_gene = adata_dapi.X[row, :]
+            if vect_gene.sum() > 0:
+                norm_vect = vect_gene / np.sum(vect_gene)
+                closeness = np.array([np.dot(df_major_clusters.iloc[j], norm_vect) for j in range(len(df_major_clusters))])
+                closest_cluster = int(closeness.argmax())
+                closeness_dict_dapi[closest_cluster].append(closeness)
+
+        closeness_dict_dapi_unmatched = {i: [] for i in range(len(df_major_clusters))}
+        for row in range(len(adata_match_iou_dapi_un)):
+            vect_gene = adata_match_iou_dapi_un.X[row, :]
+            if vect_gene.sum() > 0:
+                norm_vect = vect_gene / np.sum(vect_gene)
+                closeness = np.array([np.dot(df_major_clusters.iloc[j], norm_vect) for j in range(len(df_major_clusters))])
+                closest_cluster = int(closeness.argmax())
+                closeness_dict_dapi_unmatched[closest_cluster].append(closeness)
+
+        for i in range(len(closeness_dict_iou.keys())):
+            fig, axs = plt.subplots(ncols=3, nrows=1, figsize=(20, 5))
+            categories = df_major_clusters.index.tolist()
+
+            data_df = pd.DataFrame(closeness_dict_iou[i], columns=categories)
+            data_melted = data_df.melt(var_name='Category', value_name='Value')
+            sns.boxplot(x='Category', y='Value', data=data_melted, ax=axs[0])
+
+            data_df = pd.DataFrame(closeness_dict_dapi[i], columns=categories)
+            data_melted = data_df.melt(var_name='Category', value_name='Value')
+            sns.boxplot(x='Category', y='Value', data=data_melted, ax=axs[1])
+
+            data_df = pd.DataFrame(closeness_dict_dapi_unmatched[i], columns=categories)
+            data_melted = data_df.melt(var_name='Category', value_name='Value')
+            sns.boxplot(x='Category', y='Value', data=data_melted, ax=axs[2])
+            [ax.tick_params(axis="x", rotation=45) for ax in axs]
+            plt.tight_layout()
+            plt.savefig(plots_dir_ / f"cluster_matching_comparison_{i}.png")
+            plt.close()
+
+
+
+
+
+        #
+
+        # check if there are genes that are RNA that are only expressed in other clusters
 
 def convert_geojson(ix, masks_df, save_path_):
     masks_ = masks_df.iloc[ix]
@@ -683,11 +918,13 @@ def load_geojson(path: Path, shift):
     return masks_dict, str_cat, params_cat
 
 
-def extract_matching_mask(masks_he_, masks_dapi_, iou_threshold_):
+def extract_matching_mask(masks_he_, masks_dapi_, iou_threshold_, full=False):
     """
 
     :param masks_he_:
     :param masks_dapi_:
+    :param iou_threshold_:
+    :param full: returns full information of unmatched H&E and matched DAPI
     :return:
     """
 
@@ -697,10 +934,13 @@ def extract_matching_mask(masks_he_, masks_dapi_, iou_threshold_):
     dapi_gpd = gpd.GeoDataFrame(masks_dapi_df, geometry=masks_dapi_df.polygon)
     dapi_sindex = dapi_gpd.sindex
 
-    dict_match = {"dapi": [], "he": [], 'cell_id': []}
+    dict_match = {"dapi": [], "he": [], 'cell_id': [], 'iou': []}
+    dict_unmatch = {"he": [], 'cell_id': []}
+
+    dapi_matched = []
 
     for i, mask_he in masks_he_df.iterrows():
-        mask_he = mask_he[0]
+        mask_he = mask_he.polygon
         intersection = list(dapi_sindex.intersection(mask_he.bounds))
         if len(intersection) > 0:
             ious = []
@@ -713,16 +953,29 @@ def extract_matching_mask(masks_he_, masks_dapi_, iou_threshold_):
                     ious.append(iou)
                     ious_index.append(j)
 
-            if len(ious) > 0 and max(ious) > iou_threshold:
+            if len(ious) > 0 and max(ious) > iou_threshold_:
                 ix = np.argmax(ious)
                 mask_dapi = dapi_gpd.iloc[ious_index[ix]].polygon
                 dict_match["dapi"].append(mask_dapi)
                 dict_match["he"].append(mask_he)
                 dict_match["cell_id"].append(i)
+                dict_match["iou"].append(max(ious))
+                dapi_matched.append(ious_index[ix])
+            else:
+                dict_unmatch["he"].append(mask_he)
+                dict_unmatch["cell_id"].append(i)
+        else:
+            dict_unmatch["he"].append(mask_he)
+            dict_unmatch["cell_id"].append(i)
 
+    # TODO: discuss if nuclei that are associated to one -> 737 (should we erase them or just consider oversegmentation)
     df_match = pd.DataFrame.from_dict(dict_match)
+    df_unmatch = pd.DataFrame.from_dict(dict_unmatch)
 
-    return df_match
+    if full:
+        return df_match, df_unmatch, dapi_matched
+    else:
+        return df_match
 
 
 def visualize_clustering(adata, n_neighbors, n_pcas, results_dir):
@@ -807,31 +1060,32 @@ if __name__ == "__main__":
     run_segment_main = True
     run_segment_test = False
     run_type = "MATCHING"
-    iou_threshold = 0.5
+    iou_threshold = 0.4
+    masks_union = False
 
     # ---------------------------------------------------- #
     # Set up the run
     results_dir = build_dir()
 
+    # Use generated GeoJson to extract dict of category and params
     masks, str_category, params_category = None, None, None
     masks_he, masks_dapi = None, None
+    segmentation_path = get_data_path() / "Xenium_Breast_Cancer_1_Qupath_Masks"
     if run_type == "DAPI":
         # Segmentation for DAPI Images
-        segmentation_path = get_data_path() / "Xenium_Breast_Cancer_1_Qupath_Masks" / "morphology_mip.ome.tif - Image0_v2.geojson"
+        segmentation_path_dapi = segmentation_path / "dapi_segment_full.geojson"
         results_dir = results_dir / "DAPI"
         os.makedirs(results_dir, exist_ok=True)
-        masks, str_category, params_category = load_geojson(segmentation_path, shift=False)
-
+        masks, str_category, params_category = load_geojson(segmentation_path_dapi, shift=False)
     elif run_type == "H&E":
         # Segmentation for H&E Images
-        segmentation_path = get_data_path() / "Xenium_Breast_Cancer_1_Qupath_Masks" / "morphology_he_v2.geojson"
+        segmentation_path_he = segmentation_path / "he_segment_full.geojson"
         results_dir = results_dir / "H&E_v2"
         os.makedirs(results_dir, exist_ok=True)
-        masks, str_category, params_category = load_geojson(segmentation_path, shift=True)
-
+        masks, str_category, params_category = load_geojson(segmentation_path_he, shift=False)
     elif run_type == "MATCHING":
-        segmentation_path_he = get_data_path() / "Xenium_Breast_Cancer_1_Qupath_Masks" / "he_segment_full.geojson"
-        segmentation_path_dapi = get_data_path() / "Xenium_Breast_Cancer_1_Qupath_Masks" / "dapi_segment_full.geojson"
+        segmentation_path_he = segmentation_path / "he_segment_full.geojson"
+        segmentation_path_dapi = segmentation_path / "dapi_segment_full.geojson"
         results_dir = results_dir / "matching"
         os.makedirs(results_dir, exist_ok=True)
         masks_he, str_category_he, params_category_he = load_geojson(segmentation_path_he, shift=False)
@@ -852,25 +1106,31 @@ if __name__ == "__main__":
     if run_segment_main:
         he_str = '4096_1.0-99.0_0.3'
         dapi_str = '4096_1.0-99.9_0.4'
-        adata_filename_match = "Xenium-BreastCancer_stardist_qupath_HE_DAPI_matched.h5ad"
+        adata_filename_match = f"Xenium-BreastCancer_stardist_qupath_HE_DAPI_matched_iou_{iou_threshold}.h5ad"
         adata_filename_he = f"Xenium-BreastCancer_stardist_qupath_he_{he_str}.h5ad"
         adata_filename_dapi = f"Xenium-BreastCancer_stardist_qupath_dapi_{dapi_str}.h5ad"
 
         if (not os.path.isfile(results_dir / "adata" / adata_filename_match) or
                 not os.path.isfile(results_dir / "adata" / adata_filename_he) or
                 not os.path.isfile(results_dir / "adata" / adata_filename_dapi)):
+
             # Running Clustering on Match between HE and DAPI optimal segmentation
+            print("Building DAPI-H&E matched Object")
             df_match = extract_matching_mask(masks_he[he_str], masks_dapi[dapi_str], iou_threshold)
             transcripts = load_xenium_transcriptomics(human_breast_path)
             df_match["polygon"] = df_match.dapi
-            adata_match = nucleus_transcripts_matrix_creation(masks_nucleus=df_match[["polygon", "cell_id"]], transcripts_df=transcripts,
+            # TODO: test union of boundaries together -≥ probably requires a purity score measure§
+            adata_match = nucleus_transcripts_matrix_creation(masks_nucleus=df_match[["polygon", "cell_id"]],
+                                                              transcripts_df=transcripts,
                                                               background_masks=background, results_dir_=results_dir,
                                                               filename_=adata_filename_match[:-5], sample_=False)
+            # Adding H&E nucleus boundaries
             df_match["polygon"] = df_match.he
             adata_match.uns["he_nucleus_boundaries"] = convert_masks_to_df(df_match[["polygon", "cell_id"]], adata_match.obs.cell_id.tolist())
             adata_match.write_h5ad(results_dir / "adata" / adata_filename_match)
 
             # Running on H&E segmentation
+            print("Building H&E Object")
             df_he = pd.DataFrame(data={"polygon": masks_he[he_str], "cell_id": range(0, len(masks_he[he_str]))},
                                  columns=["polygon", "cell_id"])
             adata_he = nucleus_transcripts_matrix_creation(masks_nucleus=df_he,
@@ -887,35 +1147,35 @@ if __name__ == "__main__":
                                                              filename_=adata_filename_dapi[:-5], sample_=False)
 
         else:
+            # Reload objects if already exists
             adata_match = sc.read_h5ad(results_dir / "adata" / adata_filename_match)
             adata_he = sc.read_h5ad(results_dir / "adata" / adata_filename_he)
             adata_dapi = sc.read_h5ad(results_dir / "adata" / adata_filename_dapi)
 
         # Based on Optimization
-        n_neighbors = [30]
-        n_pcas = [100]
-        clustering_dir = results_dir / "clustering"
+        n_neighbors = [10, 30, 50]
+        n_pcas = [10, 50, 100, 200]
+        clustering_dir = results_dir / f"clustering_{iou_threshold}"
         os.makedirs(clustering_dir, exist_ok=True)
 
-        match_results = clustering_dir / "he_dapi_match"
-        os.makedirs(match_results, exist_ok=True)
-
         print("Running Script on DAPI-HE-Match")
+        match_results = clustering_dir / f"he_dapi_match"
+        os.makedirs(match_results, exist_ok=True)
         adata_match_labeled = visualize_clustering(adata_match, n_neighbors=n_neighbors, results_dir=match_results, n_pcas=n_pcas)
         adata_match_labeled_marker, marker_genes_match = extract_marker_genes(adata_match_labeled, match_results)
         [print(marker.head(5)) for marker in marker_genes_match]
         visualize_spatial_cluster(adata_match_labeled, image_he, match_results)
 
-        he_results = clustering_dir / "he_lab"
-        os.makedirs(he_results, exist_ok=True)
         print("Running Script on HE")
+        he_results = clustering_dir / "he"
+        os.makedirs(he_results, exist_ok=True)
         adata_he_labeled = visualize_clustering(adata_he, n_neighbors=n_neighbors, results_dir=he_results, n_pcas=n_pcas)
         extract_marker_genes(adata_he_labeled, he_results)
         visualize_spatial_cluster(adata_he_labeled, image_he, he_results)
 
+        print("Running Script on DAPI")
         dapi_results = clustering_dir / "dapi"
         os.makedirs(dapi_results, exist_ok=True)
-        print("Running Script on DAPI")
         adata_dapi_labeled = visualize_clustering(adata_dapi, n_neighbors=n_neighbors, results_dir=dapi_results, n_pcas=n_pcas)
         extract_marker_genes(adata_dapi_labeled, dapi_results)
         visualize_spatial_cluster(adata_dapi_labeled, image_he, he_results)
@@ -937,4 +1197,10 @@ if __name__ == "__main__":
         else:
             he_str = '4096_1.0-99.0_0.3'
             dapi_str = '4096_1.0-99.9_0.4'
-            test_matching(masks_he[he_str], masks_dapi[dapi_str], image_dapi, image_he, results_dir)
+
+            # Test matching to get the iou threshold
+            #test_matching(masks_he[he_str], masks_dapi[dapi_str], image_dapi, image_he, results_dir)
+
+            # Test
+            transcripts = load_xenium_transcriptomics(human_breast_path)
+            test_transcripts_iou_threshold(masks_he[he_str], masks_dapi[dapi_str], transcripts, background, results_dir)
