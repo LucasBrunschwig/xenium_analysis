@@ -150,7 +150,7 @@ class ImageClassificationTraining(nn.Module):
                         )
                         break
 
-        return val_loss, train_loss
+        return val_loss, torch.mean(train_loss)
 
     def test(self, X):
         self.model.to(DEVICE)
