@@ -59,14 +59,13 @@ class TestImageDataset(Dataset):
         labels (torch.Tensor): Tensor containing the labels corresponding to the images.
         preprocess (callable): Preprocessing to be applied to image.
         """
-        self.image = pd.DataFrame(data).squeeze(axis=1)
+        self.image = data
         self.preprocess = preprocess
 
     def __len__(self):
         return len(self.image)
 
     def __getitem__(self, index):
-        image = self.image.iloc[index]
+        image = self.image[index]
         image = self.preprocess(image)
-
         return image

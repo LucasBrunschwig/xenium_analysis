@@ -43,7 +43,7 @@ class ImageClassificationTraining(nn.Module):
         self.early_stopping = early_stopping
         self.weighted_ce = weighted_ce
         self.results_dir = results_dir
-
+        self.num_classes = self.model.get_num_classes()
 
         # Create
 
@@ -96,6 +96,7 @@ class ImageClassificationTraining(nn.Module):
             start_ = time.time()
             if progress:
                 progress_bar = tqdm(total=np.ceil(len(train_indices) / self.batch_size), desc="Processing Batch")
+            self.model.train()
             for batch_ndx, sample in enumerate(train_loader):
                 if progress:
                     progress_bar.update(1)
@@ -125,9 +126,8 @@ class ImageClassificationTraining(nn.Module):
 
             if self.early_stopping or i % self.n_iter_print == 0 or i == self.n_iter - 1:
                 with torch.no_grad():
-
+                    self.model.eval()
                     val_loss = []
-
                     for batch_val_ndx, sample in enumerate(val_loader):
                         X_val_next, y_val_next = sample
                         X_val_next = X_val_next.to(DEVICE)
@@ -162,7 +162,7 @@ class ImageClassificationTraining(nn.Module):
 
         return val_loss, torch.mean(train_loss)
 
-    def test(self, X):
+    def predict(self, X):
         self.model.to(DEVICE)
         self.model.eval()
         with torch.no_grad():
@@ -185,6 +185,23 @@ class ImageClassificationTraining(nn.Module):
                     )
                 )
             return pd.DataFrame(results)
+
+    def predict_proba(self, x):
+        self.model.to(DEVICE)
+        self.model.eval()
+        with torch.no_grad():
+            results = np.empty((0, self.num_classes))
+            test_loader = DataLoader(TestImageDataset(x, preprocess=self.preprocess), batch_size=self.batch_size,
+                                     pin_memory=False)
+
+            for batch_test_ndx, x_test in enumerate(test_loader):
+                results = np.vstack(
+                    (
+                        results,
+                        nn.Softmax(dim=1)(self.model(x_test.to(DEVICE))).detach().cpu().numpy()
+                    )
+                )
+            return results
 
     def _check_tensor(self, X: torch.Tensor) -> torch.Tensor:
         if isinstance(X, torch.Tensor):
@@ -357,7 +374,8 @@ if __name__ == "__main__":
 
         optuna_study = {
             "sample": 1000,
-            "metrics": "balanced_accuracy"
+            "metrics": ["balanced_accuracy", "class_accuracy"],
+            "optimization": "balanced_accuracy"
         }
 
         model_params_definition = {
@@ -366,7 +384,7 @@ if __name__ == "__main__":
             "model_type": model_type,
             "attention_layer": True,
             "unfrozen_layers": [[1, 2, 3, 4], "int"],
-            "n_classifier": [[1, 2, 3], "int"],
+            #"n_classifier": [[1, 2, 3], "int"],
         }
 
         training_params_definition = {
@@ -377,7 +395,7 @@ if __name__ == "__main__":
                 "results_dir": optuna_dir,
                 "n_iter_min": 10,
                 "n_iter_print": 10,
-                "n_iter": 150,
+                "n_iter": 1,
                 # Optimization Parameters
                 "batch_size": [[128, 256, 512], "categorical"],
                 "patience": [[3, 5, 10], "categorical"],
@@ -387,5 +405,5 @@ if __name__ == "__main__":
                 "weighted_ce": [[True, False], "categorical"]
         }
 
-        optuna_optimization(ImageClassificationModel, ImageClassificationTraining, X, y,
+        optuna_optimization(optuna_study, ImageClassificationModel, ImageClassificationTraining, X, y,
                             model_params_definition, training_params_definition, save_study, study_name)

@@ -13,6 +13,8 @@ class ImageClassificationModel(nn.Module):
     def __init__(self, num_classes, model_type, in_dim, attention_layer, unfrozen_layers):
         super(ImageClassificationModel, self).__init__()
 
+        self.num_classes = num_classes
+
         if model_type == "cnn":
             self.model = CNNClassifierWithAttention(num_classes, in_dim, attention_layer)
         elif model_type == "resnet":
@@ -22,6 +24,9 @@ class ImageClassificationModel(nn.Module):
             self.model = VisionTransformer(num_classes, model_type, unfrozen_layers)
         else:
             raise ValueError("Not a model type choose in [cnn, resnet, vit]")
+
+    def get_num_classes(self):
+        return self.num_classes
 
     def forward(self, x):
         return self.model(x)
