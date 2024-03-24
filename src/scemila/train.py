@@ -373,7 +373,7 @@ if __name__ == "__main__":
         set_up_logger_optuna(save_study)
 
         optuna_study = {
-            "sample": 1000,
+            "sample": 1024,
             "metrics": ["balanced_accuracy", "class_accuracy"],
             "optimization": "balanced_accuracy"
         }
