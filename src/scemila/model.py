@@ -19,7 +19,7 @@ class ImageClassificationModel(nn.Module):
             self.model = CNNClassifierWithAttention(num_classes, in_dim, attention_layer)
         elif model_type == "resnet":
             resnet_model = "resnet50"
-            self.model = ResNetAttention(num_classes, in_dim, resnet_model, attention_layer)
+            self.model = ResNetAttention(num_classes, in_dim, resnet_model, attention_layer, unfrozen_layers)
         elif "vit" in model_type:
             self.model = VisionTransformer(num_classes, model_type, unfrozen_layers)
         else:
@@ -110,7 +110,7 @@ class VisionTransformer(nn.Module):
 
 
 class ResNetAttention(nn.Module):
-    def __init__(self, num_classes, in_dim, resnet_model="resnet50", attention_layer=True):
+    def __init__(self, num_classes, in_dim, resnet_model="resnet50", attention_layer=True, unfrozen_layers=True):
         super(ResNetAttention, self).__init__()
 
         assert resnet_model in ["resnet50"]
@@ -121,8 +121,11 @@ class ResNetAttention(nn.Module):
             for param in self.conv.parameters():
                 param.requires_grad = False
             # Unfreeze last layer
-            for param in self.conv.layer4.parameters():
-                param.requires_grad = True
+            layers = ["layer1", "layer2", "layer3", "layer4"]
+            layers_unfreeze = layers[-unfrozen_layers:]
+            for name, param in self.conv.named_modules():
+                if name.split(".")[0] in layers_unfreeze:
+                    param.requires_grad = True
         else:
             raise ValueError("Not Implemented")
 
