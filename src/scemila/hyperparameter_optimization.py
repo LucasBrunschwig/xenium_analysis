@@ -4,11 +4,12 @@ from functools import partial
 import numpy as np
 from loguru import logger
 import optuna
-import torch
 import random
 from sklearn.model_selection import StratifiedKFold
 
 from src.scemila.metrics_utils import ClassifierMetrics
+from src.scemila.utils import save_pickle_params
+
 
 best_val = None
 
@@ -43,8 +44,20 @@ def build_params(params_collection, params_selection_str, trial):
                 params_selection[param_name] = trial.suggest_uniform(param_name, range_[0], range_[1])
             elif distribution == "categorical":
                 params_selection[param_name] = trial.suggest_categorical(param_name, range_)
+            elif distribution == "log_float":
+                params_selection[param_name] = trial.suggest_float(param_name, range_[0], range_[1], log=True)
+            elif distribution == "log_int":
+                params_selection[param_name] = trial.suggest_int(param_name, range_[0], range_[1], log=True)
+            elif distribution == "float":
+                params_selection[param_name] = trial.suggest_float(param_name, range_[0], range_[1], step=range_[2])
             elif distribution == "int":
-                params_selection[param_name] = trial.suggest_int(param_name, range_[0], range_[-1])
+                params_selection[param_name] = trial.suggest_int(param_name, range_[0], range_[1], step=range_[2])
+            elif distribution == "power_int":
+                power = trial.suggest_int(param_name, range_[0], range_[1], step=range_[2])
+                params_selection[param_name] = range_[3]*(range_[4]**power)
+            elif distribution == "multiply_int":
+                multiplier = trial.suggest_int(param_name, range_[0], range_[1], step=range_[2])
+                params_selection[param_name] = range_[3]*multiplier
             params_selection_str += f"{param_name}-{params_selection[param_name]}, "
         else:
             params_selection[param_name] = description
@@ -52,7 +65,7 @@ def build_params(params_collection, params_selection_str, trial):
     return params_selection, params_selection_str
 
 
-def objective(trial, optuna_params, model_params, training_params, x, y, model, training, save_model):
+def objective(trial, optuna_params, model_params, training_params, x, y, model, training, save_model, device):
 
     # Instantiate Parameters
     params_selection_str = f"Starting Trial {trial.number}: "
@@ -67,7 +80,7 @@ def objective(trial, optuna_params, model_params, training_params, x, y, model, 
     model_instance = model(**params_mo)
    #torch.compile(model_instance)
     params_tr["model"] = model_instance
-    training_instance = training(**params_tr)
+    training_instance = training(**params_tr, device=device)
 
     stratifier = StratifiedKFold(n_splits=5, random_state=3, shuffle=True)
 
@@ -105,7 +118,7 @@ def objective(trial, optuna_params, model_params, training_params, x, y, model, 
             str_ = f"{name}: "
             for label in metric[0].keys():
                 label_values = [value[label] for value in metric]
-                str_ += f"{label}: {np.mean(label_values):.2f} +/-  {np.std(label_values):.2f} |"
+                str_ += f"{label}: {np.mean(label_values):.1f} +/-  {np.std(label_values):.1f} |"
             print(str_)
 
     optimization_value = np.mean(metric_fold[optuna_params["optimization"]])
@@ -118,23 +131,22 @@ def objective(trial, optuna_params, model_params, training_params, x, y, model, 
     return optimization_value
 
 
-def optuna_optimization(optuna_params, model, training, X, y, model_params, training_params, save_dir, study_name):
+def optuna_optimization(optuna_params, model, training, X, y, model_params, training_params, save_dir, study_name,
+                        device):
 
-    with open(save_dir / "model_params.json", "wb") as file:
-        pickle.dump(model_params, file)
-    with open(save_dir / "training_params.json", "wb") as file:
-        pickle.dump(training_params, file)
+    save_pickle_params(model_params, save_dir / "model_params.json")
+    save_pickle_params(training_params, save_dir / "training_params.json")
 
     # Create a study object and specify the optimization direction as 'minimize'.
-    study = optuna.create_study(study_name=study_name, direction="minimize",
-                                storage=f"sqlite:///{save_dir}/trial.db")
+    study = optuna.create_study(study_name=study_name, direction="maximize", storage=f"sqlite:///{save_dir}/trial.db")
 
     logger.info(f"Starting study with: {study_name} - stored in {save_dir}/trial.db")
 
     # Start the optimization; the number of trials can be adjusted
     objective_with_params = partial(objective, model_params=model_params, training_params=training_params,
-                                    x=X, y=y, model=model, training=training, save_model=save_dir, optuna_params=optuna_params)
-    study.optimize(objective_with_params, n_trials=30)
+                                    x=X, y=y, model=model, training=training, save_model=save_dir,
+                                    optuna_params=optuna_params, device=device)
+    study.optimize(objective_with_params, n_trials=50)
 
     # Print the optimal parameters
     best_params = study.best_params
@@ -142,4 +154,4 @@ def optuna_optimization(optuna_params, model, training, X, y, model_params, trai
 
     # Optionally, you can print the best value (e.g., lowest validation loss)
     best_value = study.best_value
-    print(f"Best value (lowest validation loss): {best_value}")
+    print(f"Best value (highest {optuna_params['optimization']}): {best_value}")

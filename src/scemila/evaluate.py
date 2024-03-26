@@ -13,7 +13,7 @@ from captum.attr import IntegratedGradients
 from captum.attr import visualization as viz
 
 from src.utils import get_results_path, check_gpu
-from src.scemila.model import ImageClassificationModel
+from src.scemila.models import ImageClassificationModel
 
 
 def plot_confusion_matrix(predictions, y_test_, save_dir):

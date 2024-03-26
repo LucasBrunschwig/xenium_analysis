@@ -1,8 +1,5 @@
 from torch.utils.data import Dataset
-from torchvision import transforms
 import torchvision
-import pandas as pd
-from typing import Union
 import torch
 
 
@@ -48,6 +45,7 @@ class TrainingImageDataset(Dataset):
     @property
     def images(self):
         return self._image
+
 
 class TestImageDataset(Dataset):
     def __init__(self, data, preprocess):

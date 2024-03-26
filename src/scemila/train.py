@@ -19,18 +19,19 @@ import sys
 from tqdm import tqdm
 
 from src.utils import check_gpu, get_results_path
-from src.scemila.custom_dataset import TrainingImageDataset, TestImageDataset
-from src.scemila.model import ImageClassificationModel
+from src.scemila.torch_dataset import TrainingImageDataset, TestImageDataset
+from src.scemila.models import ImageClassificationModel
 from sklearn.model_selection import StratifiedShuffleSplit
 
 
 class ImageClassificationTraining(nn.Module):
     def __init__(self, model, batch_size, lr, n_iter, n_iter_min, early_stopping, n_iter_print, patience,
-                 preprocess, transforms, clipping_value, weight_decay, weighted_ce, results_dir):
+                 preprocess, transforms, clipping_value, weight_decay, weighted_ce, results_dir, device):
         super(ImageClassificationTraining, self).__init__()
 
         # Model
-        self.model = model.to(DEVICE)
+        self.device = device
+        self.model = model.to(device)
 
         # Training
         self.batch_size = batch_size
@@ -85,7 +86,7 @@ class ImageClassificationTraining(nn.Module):
             class_counts = torch.bincount(y.squeeze().long())
             class_weights = 1. / class_counts.float()
             class_weights = class_weights / class_weights.sum()
-            class_weights = class_weights.to(DEVICE)
+            class_weights = class_weights.to(self.device)
             loss = nn.CrossEntropyLoss(weight=class_weights)
         else:
             loss = nn.CrossEntropyLoss()
@@ -104,8 +105,8 @@ class ImageClassificationTraining(nn.Module):
                 self.optimizer.zero_grad()
 
                 X_next, y_next = sample
-                X_next = X_next.to(DEVICE)
-                y_next = y_next.to(DEVICE)
+                X_next = X_next.to(self.device)
+                y_next = y_next.to(self.device)
 
                 preds = self.model.forward(X_next)
 
@@ -122,7 +123,7 @@ class ImageClassificationTraining(nn.Module):
                 train_loss.append(batch_loss.detach())
             if progress:
                 progress_bar.close()
-            train_loss = torch.Tensor(train_loss).to(DEVICE)
+            train_loss = torch.Tensor(train_loss).to(self.device)
 
             if self.early_stopping or i % self.n_iter_print == 0 or i == self.n_iter - 1:
                 with torch.no_grad():
@@ -130,8 +131,8 @@ class ImageClassificationTraining(nn.Module):
                     val_loss = []
                     for batch_val_ndx, sample in enumerate(val_loader):
                         X_val_next, y_val_next = sample
-                        X_val_next = X_val_next.to(DEVICE)
-                        y_val_next = y_val_next.to(DEVICE)
+                        X_val_next = X_val_next.to(self.device)
+                        y_val_next = y_val_next.to(self.device)
 
                         preds = self.model.forward(X_val_next)
                         val_loss.append(loss(preds, y_val_next).detach())
@@ -163,7 +164,7 @@ class ImageClassificationTraining(nn.Module):
         return val_loss, torch.mean(train_loss)
 
     def predict(self, X):
-        self.model.to(DEVICE)
+        self.model.to(self.device)
         self.model.eval()
         with torch.no_grad():
             results = np.empty((0, 1))
@@ -175,7 +176,7 @@ class ImageClassificationTraining(nn.Module):
                     (
                         results,
                         np.expand_dims(
-                            self.model(X_test.to(DEVICE))
+                            self.model(X_test.to(self.device))
                             .argmax(dim=-1)
                             .detach()
                             .cpu()
@@ -187,7 +188,7 @@ class ImageClassificationTraining(nn.Module):
             return pd.DataFrame(results)
 
     def predict_proba(self, x):
-        self.model.to(DEVICE)
+        self.model.to(self.device)
         self.model.eval()
         with torch.no_grad():
             results = np.empty((0, self.num_classes))
@@ -198,7 +199,7 @@ class ImageClassificationTraining(nn.Module):
                 results = np.vstack(
                     (
                         results,
-                        nn.Softmax(dim=1)(self.model(x_test.to(DEVICE))).detach().cpu().numpy()
+                        nn.Softmax(dim=1)(self.model(x_test.to(self.device))).detach().cpu().numpy()
                     )
                 )
             return results
@@ -360,7 +361,7 @@ if __name__ == "__main__":
         logger.info("Saving Model: to model_parameters.pth")
         model.save(model_dir)
     else:
-        from src.scemila.optuna_optimization import optuna_optimization
+        from src.scemila.hyperparameter_optimization import optuna_optimization
 
         optuna_dir = results_dir / "optuna"
         os.makedirs(optuna_dir, exist_ok=True)

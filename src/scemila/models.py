@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
+from torchvision.models import ResNet50_Weights
 
 from src.utils import check_gpu
 
@@ -116,13 +117,13 @@ class ResNetAttention(nn.Module):
         assert resnet_model in ["resnet50"]
 
         if resnet_model == "resnet50":
-            self.conv = models.resnet50(pretrained=True)
+            self.conv = models.resnet50(weights=ResNet50_Weights.DEFAULT)
             self.num_feature_maps = 2048
             for param in self.conv.parameters():
                 param.requires_grad = False
             # Unfreeze last layer
-            layers = ["layer1", "layer2", "layer3", "layer4"]
-            layers_unfreeze = layers[-unfrozen_layers:]
+            layers = ["layer4", "layer3", "layer2", "layer1"]
+            layers_unfreeze = layers[0:unfrozen_layers]
             for name, param in self.conv.named_modules():
                 if name.split(".")[0] in layers_unfreeze:
                     param.requires_grad = True
