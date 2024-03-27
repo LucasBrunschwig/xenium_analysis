@@ -34,7 +34,6 @@ class MyCustomDataset(Dataset):
         return len(self.x)
 
     def __getitem__(self, idx):
-        sample = self.x[idx], self.y[idx]
         return self.x[idx], self.y[idx]
 
 

@@ -144,15 +144,24 @@ def main(dataset_name_, model_params_, training_params_, optuna_, device_, resul
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Argument parser for learning rate and number of iterations")
+
+    # Training
     parser.add_argument("--lr", type=float, default=0.01, help="Learning rate for training")
     parser.add_argument("--n_iter", type=int, default=1000, help="Number of iterations for training")
     parser.add_argument("--size", type=int, default=128, help="Number of iterations for training")
+    parser.add_argument("--patience", type=int, default=10, help="patience number")
+    parser.add_argument("--batch_size", type=int, default=256, help="patience number")
+    parser.add_argument("--weight_decay", type=float, default=1e-3, help="patience number")
+    parser.add_argument("--clip", type=float, default=1.0, help="patience number")
+    parser.add_argument("--ce", type=bool, default=False, help="patience number")
+    # Model Params
     parser.add_argument("--unfrozen_layers", type=int, default=0, help="Number of unfrozen layers")
     parser.add_argument("--attention_layer", type=bool, default=True, help="Number of unfrozen layers")
     parser.add_argument("--model", type=str, default="resnet", help="[resnet, conv, vit]")
+    parser.add_argument("--n_layer_classifier", type=int, default=2, help="[resnet, conv, vit]")
+    # Run Params
     parser.add_argument("--dataset", type=str, default=None, help="pickle file")
     parser.add_argument("--gpu", type=int, default=0, help="gpu number")
-    parser.add_argument("--patience", type=int, default=10, help="patience number")
     parser.add_argument("--optuna", type=bool, default=False, help="whether use optuna to optimize the model")
     parser.add_argument("--config", type=str, default=None, help="configuration file")
 
@@ -169,15 +178,26 @@ if __name__ == "__main__":
 
     # Parse arguments
     args = parse_arguments()
+
+    # Training
     lr = float(args.lr)
     n_iter = int(args.n_iter)
+    patience = int(args.patience)
+    batch_size = int(args.batch_size)
+    weight_decay = int(args.weight_decay)
+    clipping_value = float(args.clip)
+    weighted_ce = bool(args.ce)
+
+    # Model
     preprocess_size = int(args.size)
     model_type = str(args.model)
-    dataset_name = str(args.dataset)
-    gpu_number = int(args.gpu)
-    patience = int(args.patience)
     unfrozen_layers = int(args.unfrozen_layers)
     attention_layer = int(args.attention_layer)
+    n_layer_classifier = int(args.n_layer_classifier)
+
+    # Run
+    dataset_name = str(args.dataset)
+    gpu_number = int(args.gpu)
     optuna = bool(args.optuna)
     config_file = args.config
 
@@ -192,20 +212,20 @@ if __name__ == "__main__":
                     "model_type": model_type,
                     "attention_layer": attention_layer,
                     "unfrozen_layers": unfrozen_layers,
-                    "n_layer_classifier": 2,
+                    "n_layer_classifier": n_layer_classifier,
                     }
 
     # Set up the parameter dicts
-    training_params = {"batch_size": 256,
+    training_params = {"batch_size": batch_size,
                        "lr": lr,
                        "n_iter": n_iter,
+                       "patience": patience,
+                       "clipping_value": clipping_value,
+                       "weight_decay": weight_decay,
+                       "weighted_ce": weighted_ce,
                        "n_iter_min": 10,
                        "early_stopping": True,
                        "n_iter_print": 1,
-                       "patience": patience,
-                       "clipping_value": 1.0,
-                       "weight_decay": 1e-4,
-                       "weighted_ce": True
                        }
 
     data_augmentation_params = {"rotation_angle": 10,
