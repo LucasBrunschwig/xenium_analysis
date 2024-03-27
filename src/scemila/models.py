@@ -11,7 +11,7 @@ from src.utils import check_gpu
 
 
 class ImageClassificationModel(nn.Module):
-    def __init__(self, num_classes, model_type, in_dim, attention_layer, unfrozen_layers):
+    def __init__(self, num_classes, model_type, in_dim, attention_layer, unfrozen_layers, n_layer_classifier):
         super(ImageClassificationModel, self).__init__()
 
         self.num_classes = num_classes
@@ -20,9 +20,10 @@ class ImageClassificationModel(nn.Module):
             self.model = CNNClassifierWithAttention(num_classes, in_dim, attention_layer)
         elif model_type == "resnet":
             resnet_model = "resnet50"
-            self.model = ResNetAttention(num_classes, in_dim, resnet_model, attention_layer, unfrozen_layers)
+            self.model = ResNetAttention(num_classes, in_dim, resnet_model, attention_layer, unfrozen_layers,
+                                         n_layer_classifier)
         elif "vit" in model_type:
-            self.model = VisionTransformer(num_classes, model_type, unfrozen_layers)
+            self.model = VisionTransformer(num_classes, model_type, unfrozen_layers, n_layer_classifier)
         else:
             raise ValueError("Not a model type choose in [cnn, resnet, vit]")
 
@@ -65,7 +66,7 @@ class SelfAttention(nn.Module):
 
 
 class VisionTransformer(nn.Module):
-    def __init__(self, num_classes, model_type, unfrozen_layers):
+    def __init__(self, num_classes, model_type, unfrozen_layers, n_layer_classifier):
         super(VisionTransformer, self).__init__()
 
         assert model_type in ["vit_16", "vit_32"]
@@ -75,33 +76,43 @@ class VisionTransformer(nn.Module):
 
         if model_type == "vit_16":
             self.backbone = models.vit_b_16(weights="DEFAULT")
-            # Freeze the network
-            for parameters in self.backbone.parameters():
-                parameters.requires_grad = False
-
-            for params in self.backbone.encoder.ln.parameters():
-                params.requires_grad = True
-
-            encoder_layers = [f"encoder_layer_{i}" for i in range(11, -1, -1)]
-            layers_to_unfreeze = encoder_layers[0:self.n_unfrozen_layers]
-            for layer in layers_to_unfreeze:
-                for params in getattr(self.backbone.encoder.layers, layer).parameters():
-                    params.requires_grad = True
-
         else:
             self.backbone = models.vit_b_32(weights="DEFAULT")
 
-        # Replace classification head
-        linear_layers = [nn.Linear(self.backbone.heads.head.in_features, 512),
-                         nn.BatchNorm1d(512),
+        # Freeze the network
+        for parameters in self.backbone.parameters():
+            parameters.requires_grad = False
+
+        for params in self.backbone.encoder.ln.parameters():
+            params.requires_grad = True
+
+        encoder_layers = [f"encoder_layer_{i}" for i in range(11, -1, -1)]
+        layers_to_unfreeze = encoder_layers[0:self.n_unfrozen_layers]
+        for layer in layers_to_unfreeze:
+            for params in getattr(self.backbone.encoder.layers, layer).parameters():
+                params.requires_grad = True
+
+        input_dim = {1: 128, 2: 256, 3: 512}
+        fc_input_dim = input_dim[n_layer_classifier]
+
+        if n_layer_classifier > 0:
+            fc_layers = [nn.Linear(self.backbone.heads.head.in_features, fc_input_dim),
+                         nn.BatchNorm1d(fc_input_dim),
                          nn.ReLU(),
                          nn.Dropout(0.5),
-                         nn.Linear(512, 256),
-                         nn.BatchNorm1d(256),
-                         nn.ReLU(),
-                         nn.Dropout(0.5),
-                         nn.Linear(256, num_classes)]
-        self.backbone.heads = nn.Sequential(*linear_layers)
+                         ]
+            inter_dim = fc_input_dim
+            for i in range(n_layer_classifier - 1):
+                fc_layers.append(nn.Linear(inter_dim, inter_dim // 2))
+                fc_layers.append(nn.BatchNorm1d(inter_dim // 2))
+                fc_layers.append(nn.ReLU())
+                fc_layers.append(nn.Dropout(0.5))
+                inter_dim = inter_dim // 2
+            fc_layers.append(nn.Linear(inter_dim, num_classes))
+        else:
+            fc_layers = [nn.Linear(self.num_feature_maps * self.feature_maps_dim * self.feature_maps_dim, num_classes)]
+
+        self.backbone.heads = nn.Sequential(*fc_layers)
 
     def forward(self, x):
         return self.backbone(x)
@@ -111,7 +122,8 @@ class VisionTransformer(nn.Module):
 
 
 class ResNetAttention(nn.Module):
-    def __init__(self, num_classes, in_dim, resnet_model="resnet50", attention_layer=True, unfrozen_layers=True):
+    def __init__(self, num_classes, in_dim, resnet_model="resnet50", attention_layer=True, unfrozen_layers=True,
+                 n_layer_classifier=3):
         super(ResNetAttention, self).__init__()
 
         assert resnet_model in ["resnet50"]
@@ -142,9 +154,25 @@ class ResNetAttention(nn.Module):
             x = self.self_attention(x)
             self.feature_maps_dim = x.size(2)
 
-        self.fc1 = nn.Linear(self.num_feature_maps * self.feature_maps_dim * self.feature_maps_dim, 2048)
-        self.fc2 = nn.Linear(2048, 512)
-        self.fc3 = nn.Linear(512, num_classes)
+        input_dim = {3: 2048, 2: 1024, 1: 512}
+        if n_layer_classifier > 0:
+            fc_input_dim = input_dim[n_layer_classifier]
+            fc_layers = [nn.Linear(self.num_feature_maps * self.feature_maps_dim * self.feature_maps_dim, fc_input_dim),
+                         nn.BatchNorm1d(fc_input_dim),
+                         nn.ReLU(),
+                         nn.Dropout(0.5),
+                         ]
+            inter_dim = fc_input_dim
+            for i in range(n_layer_classifier-1):
+                fc_layers.append(nn.Linear(inter_dim, inter_dim // 2))
+                fc_layers.append(nn.BatchNorm1d(inter_dim // 2))
+                fc_layers.append(nn.ReLU())
+                fc_layers.append(nn.Dropout(0.5))
+                inter_dim = inter_dim // 2
+            fc_layers.append(nn.Linear(inter_dim, num_classes))
+        else:
+            fc_layers = [nn.Linear(self.num_feature_maps * self.feature_maps_dim * self.feature_maps_dim, num_classes)]
+        self.fc = nn.Sequential(*fc_layers)
 
     def resnet_forward(self, x):
         x = self.conv.conv1(x)
@@ -160,9 +188,8 @@ class ResNetAttention(nn.Module):
         x = self.resnet_forward(x)
         x = self.self_attention(x)
         x = x.view(x.size(0), -1)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)
+        x = self.fc(x)
+        return x
 
 
 class CNNClassifierWithAttention(nn.Module):
@@ -210,11 +237,12 @@ class CNNClassifierWithAttention(nn.Module):
 if __name__ == "__main__":
 
     device = check_gpu()
-    model = ImageClassificationModel(num_classes=10, model_type="vit_16", in_dim=96, attention_layer=True)
+    model = ImageClassificationModel(num_classes=10, model_type="resnet", in_dim=96, attention_layer=True,
+                                     n_layer_classifier=3, unfrozen_layers=3)
 
     print(model)
 
-    example = torch.zeros(1, 3, 224, 224).to(device)
+    example = torch.zeros(1, 2, 224, 224).to(device)
     model.to(device)
 
     output = model(example)

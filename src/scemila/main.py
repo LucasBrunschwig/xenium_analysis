@@ -28,7 +28,7 @@ def hyperparameters_optimization(x_, y_, num_class_, preprocess_, augmentation_,
     # Build Directory
     optuna_dir = save_dir_ / "optuna"
     os.makedirs(optuna_dir, exist_ok=True)
-    study_name = f"+{date.today()}+{model_type_}+{dataset_name_}"
+    study_name = f"{date.today()}+{model_type_}+{dataset_name_}"
     save_study = optuna_dir / study_name
     os.makedirs(save_study, exist_ok=True)
     clear_directory(save_study)
@@ -47,7 +47,7 @@ def hyperparameters_optimization(x_, y_, num_class_, preprocess_, augmentation_,
         "model_type": model_type_,
         "attention_layer": True,
         "unfrozen_layers": [[1, 4, 1], "int"],
-        # "n_classifier": [[1, 2, 3], "int"],
+        "n_layer_classifier": [[1, 3, 1], "int"],
     }
 
     training_params_definition = {
@@ -190,7 +190,8 @@ if __name__ == "__main__":
                     "in_dim": preprocess_size,
                     "model_type": model_type,
                     "attention_layer": attention_layer,
-                    "unfrozen_layers": unfrozen_layers
+                    "unfrozen_layers": unfrozen_layers,
+                    "n_layer_classifier": 2,
                     }
 
     # Set up the parameter dicts

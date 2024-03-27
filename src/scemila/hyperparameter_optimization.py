@@ -83,7 +83,7 @@ def objective(trial, optuna_params, model_params, training_params, x, y, model, 
     params_tr["model"] = model_instance
     training_instance = training(**params_tr, device=device)
 
-    stratifier = StratifiedKFold(n_splits=5, random_state=3, shuffle=True)
+    stratifier = StratifiedKFold(n_splits=4, random_state=3, shuffle=True)
 
     sampling = optuna_params["sample"]
     if sampling is not None:
@@ -139,7 +139,9 @@ def optuna_optimization(optuna_params, model, training, X, y, model_params, trai
     save_pickle_params(training_params, save_dir / "training_params.json")
 
     # Create a study object and specify the optimization direction as 'minimize'.
-    study = optuna.create_study(study_name=study_name, direction="maximize", storage=f"sqlite:///{save_dir}/trial.db")
+    sampler = optuna.samplers.TPESampler(multivariate=True)
+    study = optuna.create_study(study_name=study_name, direction="maximize", storage=f"sqlite:///{save_dir}/trial.db",
+                                sampler=sampler)
 
     logger.info(f"Starting study with: {study_name} - stored in {save_dir}/trial.db")
 
