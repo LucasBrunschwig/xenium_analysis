@@ -65,9 +65,6 @@ def build_params(params_collection, params_selection_str, trial):
 
     return params_selection, params_selection_str
 
-def train_test():
-
-
 def objective(trial, optuna_params, model_params, training_params, x, y, model, training, save_model, device):
 
     # Instantiate Parameters
@@ -79,9 +76,7 @@ def objective(trial, optuna_params, model_params, training_params, x, y, model, 
     print(params_selection_str)
     logger.info(params_selection_str)
 
-    # Create Instances
-    torch.compile(model_instance)
-    params_tr["model"] = model_instance
+
 
 
     stratifier = StratifiedKFold(n_splits=4, random_state=3, shuffle=True)
@@ -100,6 +95,8 @@ def objective(trial, optuna_params, model_params, training_params, x, y, model, 
     for train_index, test_index in stratifier.split(x, y):
 
         model_instance = model(**params_mo)
+        torch.compile(model_instance)
+        params_tr["model"] = model_instance
         training_instance = training(**params_tr, device=device)
 
         x_train = x[train_index]
