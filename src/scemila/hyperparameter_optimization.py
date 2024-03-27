@@ -65,6 +65,8 @@ def build_params(params_collection, params_selection_str, trial):
 
     return params_selection, params_selection_str
 
+def train_test():
+
 
 def objective(trial, optuna_params, model_params, training_params, x, y, model, training, save_model, device):
 
@@ -78,10 +80,9 @@ def objective(trial, optuna_params, model_params, training_params, x, y, model, 
     logger.info(params_selection_str)
 
     # Create Instances
-    model_instance = model(**params_mo)
     torch.compile(model_instance)
     params_tr["model"] = model_instance
-    training_instance = training(**params_tr, device=device)
+
 
     stratifier = StratifiedKFold(n_splits=4, random_state=3, shuffle=True)
 
@@ -95,14 +96,28 @@ def objective(trial, optuna_params, model_params, training_params, x, y, model, 
     metric_fold = {metric: [] for metric in optuna_params["metrics"]}
     train_fold = []
     val_fold = []
+    fold = 0
     for train_index, test_index in stratifier.split(x, y):
+
+        model_instance = model(**params_mo)
+        training_instance = training(**params_tr, device=device)
 
         x_train = x[train_index]
         y_train = y[train_index]
         x_test = x[test_index]
         y_test = y[test_index]
+        train_loss = 1e10
+        val_loss = 1e10
 
-        train_loss, val_loss = training_instance.train_(x_train, y_train)
+        # If pruning algorithm
+        if fold == 0 and optuna_params["pruning"] is not None:
+            for step in range(params_tr["n_iter"]):
+                train_loss, val_loss = training_instance.train_step(x_train, y_train)
+                trial.report(val_loss, step)
+                if trial.should_prune():
+                    raise optuna.TrialPruned()
+        else:
+            train_loss, val_loss = training_instance.train_(x_train, y_train)
         train_fold.append(train_loss)
         val_fold.append(val_loss)
 
@@ -110,6 +125,8 @@ def objective(trial, optuna_params, model_params, training_params, x, y, model, 
         scores = metrics.score_proba(y_test, preds)
         for name, score in scores.items():
             metric_fold[name].append(score)
+
+        fold += 1
 
     # Store loss
     for name, metric in metric_fold.items():
@@ -140,6 +157,7 @@ def optuna_optimization(optuna_params, model, training, X, y, model_params, trai
 
     # Create a study object and specify the optimization direction as 'minimize'.
     sampler = optuna.samplers.TPESampler(multivariate=True)
+    pruner = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=50)
     study = optuna.create_study(study_name=study_name, direction="maximize", storage=f"sqlite:///{save_dir}/trial.db",
                                 sampler=sampler)
 
