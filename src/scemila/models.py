@@ -237,7 +237,7 @@ class CNNClassifierWithAttention(nn.Module):
 if __name__ == "__main__":
 
     device = check_gpu()
-    model = ImageClassificationModel(num_classes=10, model_type="resnet", in_dim=96, attention_layer=True,
+    model = ImageClassificationModel(num_classes=10, model_type="vit_32", in_dim=96, attention_layer=True,
                                      n_layer_classifier=3, unfrozen_layers=3)
 
     print(model)
