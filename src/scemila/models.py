@@ -77,7 +77,7 @@ class VisionTransformer(nn.Module):
         if model_type == "vit_16":
             self.backbone = models.vit_b_16(weights="DEFAULT")
         else:
-            self.backbone = models.vit_l_32(weights="DEFAULT")
+            self.backbone = models.vit_b_32(weights="DEFAULT")
 
         # Freeze the network
         for parameters in self.backbone.parameters():
