@@ -6,6 +6,7 @@ from loguru import logger
 import optuna
 import random
 from sklearn.model_selection import StratifiedKFold
+import torch
 
 from src.scemila.metrics_utils import ClassifierMetrics
 from src.scemila.utils import save_pickle_params
@@ -78,7 +79,7 @@ def objective(trial, optuna_params, model_params, training_params, x, y, model, 
 
     # Create Instances
     model_instance = model(**params_mo)
-   #torch.compile(model_instance)
+    torch.compile(model_instance)
     params_tr["model"] = model_instance
     training_instance = training(**params_tr, device=device)
 
