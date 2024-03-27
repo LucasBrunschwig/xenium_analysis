@@ -38,7 +38,8 @@ def hyperparameters_optimization(x_, y_, num_class_, preprocess_, augmentation_,
     optuna_study = {
         "sample": 2048,
         "metrics": ["balanced_accuracy", "class_accuracy"],
-        "optimization": "balanced_accuracy"
+        "optimization": "balanced_accuracy",
+        "pruning": None,
     }
 
     model_params_definition = {
