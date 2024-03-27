@@ -63,7 +63,7 @@ def hyperparameters_optimization(x_, y_, num_class_, preprocess_, augmentation_,
         # Optimization Parameters
         "batch_size": [[0, 2, 1, 128, 2], "power_int"],
         "patience": [[0, 2, 1, 5, 2], "power_int"],
-        "lr": [[-7, -4, 1, 1, 10], "power_int"],
+        "lr": [[-6, -3, 1, 1, 10], "power_int"],
         "clipping_value": [[-1, 1, 1, 1, 10], "power_int"],
         "weight_decay": [[-5, -3, 1, 1, 10], "power_int"],
         "weighted_ce": [[True, False], "categorical"]
