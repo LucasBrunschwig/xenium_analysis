@@ -80,8 +80,8 @@ class VisionTransformer(nn.Module):
             self.backbone = models.vit_b_32(weights="DEFAULT")
 
         # Freeze the network
-        for parameters in self.backbone.parameters():
-            parameters.requires_grad = False
+        #for parameters in self.backbone.parameters():
+        #    parameters.requires_grad = False
 
         for params in self.backbone.encoder.ln.parameters():
             params.requires_grad = True
